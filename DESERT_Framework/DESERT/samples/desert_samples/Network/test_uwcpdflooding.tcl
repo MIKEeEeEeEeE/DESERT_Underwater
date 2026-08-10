@@ -80,7 +80,7 @@ load libuwip.so
 load libuwmll.so
 load libuwudp.so
 load libuwcbr.so
-load libuwdflooding.so
+load libuwcpdflooding.so
 
 #############################
 # NS-Miracle initialization #
@@ -144,9 +144,9 @@ set rnd_gen [new RandomVariable/Uniform]
 $rnd_gen use-rng $rng
 
 if {$opt(trace_files)} {
-    set opt(tracefilename) "./test_uwdflooding.tr"
+    set opt(tracefilename) "./test_uwcpdflooding.tr"
     set opt(tracefile) [open $opt(tracefilename) w]
-    set opt(cltracefilename) "./test_uwdflooding.cltr"
+    set opt(cltracefilename) "./test_uwcpdflooding.cltr"
     set opt(cltracefile) [open $opt(tracefilename) w]
 } else {
     set opt(tracefilename) "/dev/null"
@@ -210,7 +210,7 @@ proc createNode { id } {
 
     set cbr($id)  [new Module/UW/CBR]
     set udp($id)  [new Module/UW/UDP]
-    set ipr($id)  [new Module/UW/DFLOODING]
+    set ipr($id)  [new Module/UW/CPDFLOODING]
     set ipif($id) [new Module/UW/IP]
     set mll($id)  [new Module/UW/MLL]
     set mac($id)  [new Module/UW/CSMA_ALOHA]
@@ -270,7 +270,7 @@ proc createSink { } {
         set cbr_sink($cnt)  [new Module/UW/CBR]
     }
     set udp_sink       [new Module/UW/UDP]
-    set ipr_sink       [new Module/UW/DFLOODING]
+    set ipr_sink       [new Module/UW/CPDFLOODING]
     set ipif_sink      [new Module/UW/IP]
     set mll_sink       [new Module/UW/MLL]
     set mac_sink       [new Module/UW/CSMA_ALOHA]
