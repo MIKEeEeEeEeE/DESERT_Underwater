@@ -152,6 +152,7 @@ private:
                                   in the disk. */
     std::ostringstream osstream_; /**< Used to convert to string. */
 
+	double t_delay_;
     double n_dupl_; /**< Number of duplicates threshold. */
 	double t_dupl_; /**< Time window for duplicates */
 	double te_;  /**< Transmission Efficiency */
