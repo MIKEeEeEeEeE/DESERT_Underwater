@@ -147,7 +147,6 @@ UwCPDflooding::doForward(Packet *p)
         if (it2 != it->second.end()) {
             packet_state &st = it2->second;
             fh->hop() = st.hop;
-        	fh->prev_prev_hop() = ch->prev_hop_;
             fh->hop()++;
             st.is_relayed = true;
             st.timer = nullptr;
@@ -241,16 +240,25 @@ UwCPDflooding::recv(Packet *p)
     	}
 
 
-    	for(auto it = estimate_coverage_probability_map.cbegin(); it != estimate_coverage_probability_map.cend(); ++it)
-    	{
-    		std::cout << it->first << " " << it->second.first << " " << it->second.second << "\n";
+    	for (const auto &entry : coverage_map) {
+    		uint16_t from = entry.first.first;
+    		uint16_t to = entry.first.second;
+    		size_t count = entry.second;
+    		std::cout << "from=" << from
+					   << "::to=" << to
+					   << "::count=" << count
+					   << std::endl;
     	}
 
-    	for(auto it = coverage_map.cbegin(); it != coverage_map.cend(); ++it)
-    	{
-    		std::cout << it->first << " " << it->second.first << " " << it->second.second << "\n";
+    	for (const auto &entry : estimate_coverage_probability_map) {
+    		uint16_t from = entry.first.first;
+    		uint16_t to = entry.first.second;
+    		size_t count = entry.second;
+    		std::cout << "from=" << from
+					   << "::to=" << to
+					   << "::probability=" << count
+					   << std::endl;
     	}
-
 
     	// Update link quality metric using SNR metric
     	ClMsgStats stats_clmsg = ClMsgStats(stats_phy_id, UNICAST);
@@ -332,6 +340,9 @@ UwCPDflooding::recv(Packet *p)
             	// Senf notification message
                 Packet *notif = Packet::alloc();
 
+            	hdr_uwcpdflooding *flh_ = HDR_UWCPDFLOODING(notif);
+            	flh_->prev_prev_hop() = ch->prev_hop_;
+
                 hdr_cmn *ch_ = HDR_CMN(notif);
                 ch_->ptype() = PT_UWCPDFLOODING_NOTIFICATION;
                 ch_->size() = 0;
@@ -343,9 +354,6 @@ UwCPDflooding::recv(Packet *p)
             	hdr_uwip *iph_ = HDR_UWIP(notif);
             	iph_->saddr() = iph->saddr();
             	iph_->daddr() = UWIP_BROADCAST;
-
-            	hdr_uwcpdflooding *flh_ = HDR_UWCPDFLOODING(notif);
-            	flh_->prev_prev_hop() = ch->prev_hop_;
 
                 if (trace_path_)
                     this->writePathInTrace(notif, "FRWD_NTFC");
@@ -377,9 +385,9 @@ UwCPDflooding::recv(Packet *p)
 
                 // SendDown
                 ch->direction() = hdr_cmn::DOWN;
+            	flh->prev_prev_hop() = ch->prev_hop_;
                 ch->prev_hop_ = ipAddr_;
                 ch->next_hop() = UWIP_BROADCAST;
-            	flh->prev_prev_hop() = ch->prev_hop_;
                 flh->ttl()--;
                 ch->size() += sizeof(hdr_uwcpdflooding);
 
@@ -508,9 +516,9 @@ UwCPDflooding::recv(Packet *p)
             // Unicast packet not for this node - forward
             if (iph->daddr() != ipAddr_) {
                 ch->direction() = hdr_cmn::DOWN;
+            	flh->prev_prev_hop() = ch->prev_hop_;
                 ch->prev_hop_ = ipAddr_;
                 ch->next_hop() = UWIP_BROADCAST;
-            	flh->prev_prev_hop() = ch->prev_hop_;
                 flh->ttl()--;
 
                 if (flh->ttl() <= 0) {
@@ -649,11 +657,11 @@ UwCPDflooding::recv(Packet *p)
             }
 
             // iph->daddr() != ipAddr_ - forward the packet
-            ch->prev_hop_ = ipAddr_;
+        	flh->prev_prev_hop() = ch->prev_hop_;
+        	ch->prev_hop_ = ipAddr_;
             ch->next_hop() = UWIP_BROADCAST;
             ch->size() += sizeof(hdr_uwcpdflooding);
             flh->ttl() = getTTL(p);
-        	flh->prev_prev_hop() = ch->prev_hop_;
             flh->hop() = 1;
 
             if (trace_path_)
