@@ -51,7 +51,7 @@ typedef struct hdr_uwcpdflooding {
 		return offset_;
 	}
 
-	inline static nsaddr_t &
+	inline nsaddr_t &
 	prev_prev_hop()
 	{
 		return prev_prev_hop_;
