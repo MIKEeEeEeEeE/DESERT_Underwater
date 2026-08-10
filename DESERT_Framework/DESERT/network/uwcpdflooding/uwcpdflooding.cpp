@@ -98,6 +98,7 @@ UwcpdfloodingHandler::pkt() const
 
 UwCPDflooding::UwCPDflooding()
     : ipAddr_(0)
+	, debug_(0)
     , ttl_(10)
     , optimize_(1)
     , packets_forwarded_(0)
@@ -114,6 +115,7 @@ UwCPDflooding::UwCPDflooding()
     bind("n_dupl_", &n_dupl_);
     bind("t_dupl_", &t_dupl_);
     bind("optimize_", &optimize_);
+	bind("debug_", &debug_);
 } /* UwDflooding::UwDflooding */
 
 UwCPDflooding::~UwCPDflooding()
