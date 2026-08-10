@@ -240,10 +240,23 @@ UwCPDflooding::recv(Packet *p)
 			).first;
     	}
 
+
+    	for(auto it = estimate_coverage_probability_map.cbegin(); it != estimate_coverage_probability_map.cend(); ++it)
+    	{
+    		std::cout << it->first << " " << it->second.first << " " << it->second.second << "\n";
+    	}
+
+    	for(auto it = coverage_map.cbegin(); it != coverage_map.cend(); ++it)
+    	{
+    		std::cout << it->first << " " << it->second.first << " " << it->second.second << "\n";
+    	}
+
+
     	// Update link quality metric using SNR metric
     	ClMsgStats stats_clmsg = ClMsgStats(stats_phy_id, UNICAST);
     	sendSyncClMsg(&stats_clmsg);
     	double snr_db = 0.0;
+    	std::cout << stats_clmsg.getStats()->type_id << std::endl;
     	if (stats_clmsg.getStats()->type_id ==
 				(int) StatsEnum::STATS_PHY_LAYER) {
     		const UwPhysicalStats *stats =
