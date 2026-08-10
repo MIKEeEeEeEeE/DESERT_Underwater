@@ -240,6 +240,7 @@ proc createNode { id } {
     set tmp_ [expr ($id) + 1]
     $ipif($id) addr $tmp_
     $ipr($id)  addr $tmp_
+    $ipr($id) trace "./trace_common.log"
 
     set position($id) [new "Position/BM"]
     $node($id) addPosition $position($id)
