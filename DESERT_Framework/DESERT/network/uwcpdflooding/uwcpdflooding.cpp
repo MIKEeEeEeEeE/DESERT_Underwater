@@ -28,8 +28,10 @@
 //
 
 #include "uwcpdflooding.h"
-
 #include "uwcpdflooding-hdr.h"
+#include "uwphysical.h"
+#include "uwstats-utilities.h"
+
 
 #define uniform(a, b)  ((RNG::defaultrng()->uniform_double() * ((b) - (a)) + (a)))
 
@@ -105,6 +107,7 @@ UwCPDflooding::UwCPDflooding()
     , n_dupl_(0)
 	, t_dupl_(0)
     , ttl_traffic_map()
+	, stats_phy_id(0)
 { // Binding to TCL variables.
     bind("ttl_", &ttl_);
 	bind("t_delay_", &t_delay_);
