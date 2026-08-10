@@ -77,6 +77,7 @@ SUBDIRS = m4 \
     application/uwApplication \
     network/uwstaticrouting \
     network/uwflooding \
+    network/uwdflooding \
     network/uwsun \
     network/uwicrp \
     network/uwPositionBasedRouting \

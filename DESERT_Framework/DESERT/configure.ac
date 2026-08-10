@@ -100,6 +100,7 @@ DESERT_CPPFLAGS="$DESERT_CPPFLAGS "'-I$(top_srcdir)/application/uwApplication'
 DESERT_CPPFLAGS="$DESERT_CPPFLAGS "'-I$(top_srcdir)/network/uwsun'
 DESERT_CPPFLAGS="$DESERT_CPPFLAGS "'-I$(top_srcdir)/network/uwstaticrouting'
 DESERT_CPPFLAGS="$DESERT_CPPFLAGS "'-I$(top_srcdir)/network/uwflooding'
+DESERT_CPPFLAGS="$DESERT_CPPFLAGS "'-I$(top_srcdir)/network/uwdflooding'
 DESERT_CPPFLAGS="$DESERT_CPPFLAGS "'-I$(top_srcdir)/network/uwicrp'
 DESERT_CPPFLAGS="$DESERT_CPPFLAGS "'-I$(top_srcdir)/network/uwPositionBasedRouting'
 DESERT_CPPFLAGS="$DESERT_CPPFLAGS "'-I$(top_srcdir)/data_link/uwmmac_clmsgs'
@@ -160,6 +161,8 @@ DESERT_UWPHYSICAL_LIBADD='$(top_builddir)/physical/uwphysical/libuwphysical.la'
 DESERT_UWOFDMPHY_LIBADD='$(top_builddir)/physical/uwofdmphy/libuwofdmphy.la'
 DESERT_UWOPTICAL_PHY_LIBADD='$(top_builddir)/physical/uwoptical_phy/libuwoptical_phy.la'
 DESERT_UWIP_LIBADD='$(top_builddir)/network/uwip/libuwip.la'
+DESERT_UWFLOOD_LIBADD='$(top_builddir)/network/uwflooding/libuwflooding.la'
+DESERT_UWDFLOOD_LIBADD='$(top_builddir)/network/uwdflooding/libuwdflooding.la'
 DESERT_UWUDP_LIBADD='$(top_builddir)/transport/uwudp/libuwudp.la'
 DESERT_UWCBR_LIBADD='$(top_builddir)/application/uwcbr/libuwcbr.la'
 DESERT_UWMMAC_CLMSGS_LIBADD='$(top_builddir)/data_link/uwmmac_clmsgs/libuwmmac_clmsgs.la'
@@ -182,6 +185,8 @@ AC_SUBST(DESERT_UWPHYSICAL_LIBADD)
 AC_SUBST(DESERT_UWOFDMPHY_LIBADD)
 AC_SUBST(DESERT_UWOPTICAL_PHY_LIBADD)
 AC_SUBST(DESERT_UWIP_LIBADD)
+AC_SUBST(DESERT_UWFLOOD_LIBADD)
+AC_SUBST(DESERT_UWDFLOOD_LIBADD)
 AC_SUBST(DESERT_UWUDP_LIBADD)
 AC_SUBST(DESERT_UWCBR_LIBADD)
 AC_SUBST(DESERT_UWMMAC_CLMSGS_LIBADD)
@@ -242,6 +247,7 @@ AC_CONFIG_FILES([
     network/uwsun/Makefile
     network/uwstaticrouting/Makefile
     network/uwflooding/Makefile
+    network/uwdflooding/Makefile
     network/uwicrp/Makefile
     network/uwPositionBasedRouting/Makefile
     data_link/uwmmac_clmsgs/Makefile
