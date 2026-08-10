@@ -189,6 +189,7 @@ AC_SUBST(DESERT_UWOPTICAL_PHY_LIBADD)
 AC_SUBST(DESERT_UWIP_LIBADD)
 AC_SUBST(DESERT_UWFLOOD_LIBADD)
 AC_SUBST(DESERT_UWDFLOOD_LIBADD)
+AC_SUBST(DESERT_UWCPDFLOOD_LIBADD)
 AC_SUBST(DESERT_UWUDP_LIBADD)
 AC_SUBST(DESERT_UWCBR_LIBADD)
 AC_SUBST(DESERT_UWMMAC_CLMSGS_LIBADD)
@@ -250,6 +251,7 @@ AC_CONFIG_FILES([
     network/uwstaticrouting/Makefile
     network/uwflooding/Makefile
     network/uwdflooding/Makefile
+    network/uwcpdflooding/Makefile
     network/uwicrp/Makefile
     network/uwPositionBasedRouting/Makefile
     data_link/uwmmac_clmsgs/Makefile
