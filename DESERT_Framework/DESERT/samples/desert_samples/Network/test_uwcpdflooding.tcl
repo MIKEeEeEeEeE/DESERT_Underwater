@@ -94,9 +94,9 @@ $ns use-Miracle
 ##################
 set opt(start_clock) [clock seconds]
 
-set opt(nn)                 10.0 ;# Number of Nodes
+set opt(nn)                 4.0 ;# Number of Nodes
 set opt(starttime)          1
-set opt(stoptime)           50000
+set opt(stoptime)           100
 set opt(txduration)         [expr $opt(stoptime) - $opt(starttime)]
 set opt(seedcbr)            0
 set opt(memory_slots)       10000

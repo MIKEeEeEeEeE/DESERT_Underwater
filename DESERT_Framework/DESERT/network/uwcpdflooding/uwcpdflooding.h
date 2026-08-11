@@ -172,9 +172,10 @@ private:
     std::map<uint16_t, uint8_t>
             ttl_traffic_map; /**< Map with ttl per traffic. */
 
-	std::map<std::pair<uint16_t, uint16_t>, std::set<uint16_t>> neighbors;
-	std::map<uint8_t, double> coverage_prob;
-	std::map<uint8_t, double> link_quality_neighbors;
+	std::set<uint8_t> U_u;                       // Множество непокрытых соседей U(u)
+	std::map<uint8_t, double> coverage_prob;     // CPu(k)
+	std::map<uint8_t, double> link_quality_neighbors; // L(u,k)
+	std::map<std::pair<uint8_t, uint8_t>, std::set<uint16_t>> neighbors; // Bvu, Bvk
 
     /**
      * Copy constructor declared as private. It is not possible to create a new

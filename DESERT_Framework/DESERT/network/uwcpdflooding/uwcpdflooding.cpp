@@ -250,35 +250,32 @@ UwCPDflooding::recv(Packet *p)
         		auto& Bvk = neighbors[std::make_pair(v, curr_k)];
         		auto& cprobK = coverage_prob[curr_k]; // Ссылка на CPu(k)
 
-        		if (curr_k == v) {
-        			cprobK = 1.0; // Узел v точно получил пакет
-        		} else {
-        			std::vector<uint16_t> common;
-        			std::set_intersection(
-						Bvu.begin(), Bvu.end(),
-						Bvk.begin(), Bvk.end(),
-						std::back_inserter(common)
-					);
+        		if (cprobK < 0.9) {
+        			if (curr_k == v) {
+        				cprobK = 1.0; // Узел v точно получил пакет
+        			} else {
+        				std::vector<uint16_t> common;
+        				std::set_intersection(
+							Bvu.begin(), Bvu.end(),
+							Bvk.begin(), Bvk.end(),
+							std::back_inserter(common)
+						);
 
-        			double Pvku = 0.0;
-        			if (!Bvu.empty()) {
-        				Pvku = static_cast<double>(common.size()) / Bvu.size();
+        				double Pvku = 0.0;
+        				if (!Bvu.empty()) {
+        					Pvku = static_cast<double>(common.size()) / Bvu.size();
+        				}
+
+        				std::cout << "cprobK old: " << cprobK << std::endl;
+        				// Корректное обновление CPu(k)
+        				cprobK = 1.0 - (1.0 - cprobK) * (1.0 - Pvku);
+        				std::cout << "cprobK new: " << cprobK << std::endl;
         			}
 
-        			// Корректное обновление CPu(k)
-        			// cprobK = 1.0 - (1.0 - cprobK) * (1.0 - Pvku);
-        			double alpha = 0.2;
-        			cprobK = (1.0 - alpha) * cprobK + alpha * Pvku;
-
-        			// Предотвращаем застревание cprobK в чистой 1.0 (защита от машинного нуля)
-        			if (cprobK > 0.999) {
-        				cprobK = 0.999;
-        			}
+        			// TE считается на основе НАКОПЛЕННОГО покрытия cprobK:
+        			// TE = Sum( Luk * (1 - CPu(k)) )
+        			te_ += Luk * (1.0 - cprobK);
         		}
-
-        		// TE считается на основе НАКОПЛЕННОГО покрытия cprobK:
-        		// TE = Sum( Luk * (1 - CPu(k)) )
-        		te_ += Luk * (1.0 - cprobK);
         	}
 
         	std::cout << "TE: " << te_ << std::endl << std::endl;
