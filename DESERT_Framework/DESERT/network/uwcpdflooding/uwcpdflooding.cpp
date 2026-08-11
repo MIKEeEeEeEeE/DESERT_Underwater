@@ -266,7 +266,9 @@ UwCPDflooding::recv(Packet *p)
         			}
 
         			// Корректное обновление CPu(k)
-        			cprobK = 1.0 - (1.0 - cprobK) * (1.0 - Pvku);
+        			// cprobK = 1.0 - (1.0 - cprobK) * (1.0 - Pvku);
+        			double alpha = 0.2;
+        			cprobK = (1.0 - alpha) * cprobK + alpha * Pvku;
 
         			// Предотвращаем застревание cprobK в чистой 1.0 (защита от машинного нуля)
         			if (cprobK > 0.999) {
