@@ -175,6 +175,8 @@ private:
 	std::map<std::pair<uint16_t, uint16_t>, std::set<uint16_t>> neighbors;
 	std::map<uint8_t, double> coverage_prob;
 
+	double Pvku;
+
     /**
      * Copy constructor declared as private. It is not possible to create a new
      * UwDflooding object passing to its constructor another UwDflooding object.

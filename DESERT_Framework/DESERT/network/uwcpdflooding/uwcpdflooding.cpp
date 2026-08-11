@@ -235,13 +235,18 @@ UwCPDflooding::recv(Packet *p)
 				Bvk.begin(), Bvk.end(),
 				std::back_inserter(common)
 			);
-        	const double Pvku = static_cast<double>(common.size()) / Bvu.size();
+        	double Pvku = static_cast<double>(common.size()) / Bvu.size();
         	auto& probability = coverage_prob[k];
-        	te_ -= probability;
-        	probability = 1.0 - (1.0 - probability) * (1.0 - Pvku);
-			te_ += probability;
+        	if (probability > 0) {
+        		te_ -= Pvku * (1.0 - probability);
+        	}
+        	probability = 0.5 * probability + 0.5 * Pvku;
+        	te_ += Pvku * (1.0 - probability); // REDO: single update of te_
+        	if (te_ < 0.0) te_ = 0.0;
+
         	std::cout << Pvku << std::endl;
         	std::cout << probability << std::endl;
+        	std::cout << te_ << std::endl;
         	std::cout << "\n" << std::endl;
 
         	// Cancel by timer (Acknowledgement received)
@@ -358,7 +363,7 @@ UwCPDflooding::recv(Packet *p)
                             new_state.timer = new UwcpdfloodingHandler(this, p->copy());
                         	new_state.prev_prev_hop_ = ch->prev_hop_;
 
-                        	double delay = uniform(t_min_, t_max_) * (1.0 + te_);
+                        	double delay = uniform(t_min_, t_max_) / (1.0 + te_);
                             new_state.timer->sched(delay);
 
                             it2->second.insert(std::pair<uint16_t, packet_state>(ch->uid(), new_state));
@@ -436,7 +441,7 @@ UwCPDflooding::recv(Packet *p)
                     new_state.timer = new UwcpdfloodingHandler(this, p->copy());
                 	new_state.prev_prev_hop_ = ch->prev_hop_;
 
-                	double delay = uniform(t_min_, t_max_) * (1.0 + te_);
+                	double delay = uniform(t_min_, t_max_) / (1.0 + te_);
                     new_state.timer->sched(delay);
 
                     map_packets_state new_map;
@@ -489,7 +494,7 @@ UwCPDflooding::recv(Packet *p)
                         	new_state.timer = new UwcpdfloodingHandler(this, p->copy());
                         	new_state.prev_prev_hop_ = ch->prev_hop_;
 
-                        	double delay = uniform(t_min_, t_max_) * (1.0 + te_);
+                        	double delay = uniform(t_min_, t_max_) / (1.0 + te_);
                         	new_state.timer->sched(delay);
 
                         	it2->second.insert(std::pair<uint16_t, packet_state>(ch->uid(), new_state));
@@ -556,7 +561,7 @@ UwCPDflooding::recv(Packet *p)
                 	new_state.timer = new UwcpdfloodingHandler(this, p->copy());
                 	new_state.prev_prev_hop_ = ch->prev_hop_;
 
-                	double delay = uniform(t_min_, t_max_) * (1.0 + te_);
+                	double delay = uniform(t_min_, t_max_) / (1.0 + te_);
                 	new_state.timer->sched(delay);
 
                 	map_packets_state new_map;
