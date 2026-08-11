@@ -222,8 +222,6 @@ UwCPDflooding::recv(Packet *p)
     if (!ch->error()) {
         if (ch->direction() == hdr_cmn::UP) {
 
-			hdr_uwcpdflooding *flh = HDR_UWCPDFLOODING(p);
-
 			uint8_t u = ipAddr_;
 			uint8_t v = ch->prev_hop_;
 			uint8_t k = flh->prev_prev_hop_;
@@ -274,12 +272,10 @@ UwCPDflooding::recv(Packet *p)
         	te_ += Luk * (1.0 - probabilityK);
         	te_ += Luv * (1.0 - probabilityV);
 
-        	// Защита от машинного нуля / отрицательных чисел
         	if (te_ < 1e-9) {
         		te_ = 0.0;
         	}
 
-			// Вывод отладочной информации
         	std::cout << "Luk" << Luk << std::endl;
         	std::cout << "Luv" << Luv << std::endl;
 			std::cout << "Pvku: " << Pvku << std::endl;
