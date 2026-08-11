@@ -223,70 +223,70 @@ UwCPDflooding::recv(Packet *p)
     if (!ch->error()) {
         if (ch->direction() == hdr_cmn::UP) {
 
-	// 1. Извлекаем заголовки физического и сетевого уровней
-	hdr_MPhy *ph = HDR_MPHY(p);
-	hdr_cmn *ch = HDR_CMN(p);
-	hdr_uwcpdflooding *flh = HDR_UWCPDFLOODING(p);
+			// 1. Извлекаем заголовки физического и сетевого уровней
+			hdr_MPhy *ph = HDR_MPHY(p);
+			hdr_cmn *ch = HDR_CMN(p);
+			hdr_uwcpdflooding *flh = HDR_UWCPDFLOODING(p);
 
-	// Идентификаторы узлов: u (текущий узел), v (сосед-отправитель), k (сосед соседа)
-	uint8_t u = ipAddr_;
-	uint8_t v = ch->prev_hop_;
-	uint8_t k = flh->prev_prev_hop_;
+			// Идентификаторы узлов: u (текущий узел), v (сосед-отправитель), k (сосед соседа)
+			uint8_t u = ipAddr_;
+			uint8_t v = ch->prev_hop_;
+			uint8_t k = flh->prev_prev_hop_;
 
-	// 2. Рассчитываем SNR и физическое качество связи L(u, v) для текущего принятого пакета
-	double snr_linear = (ph && ph->Pn > 0.0) ? (ph->Pr / ph->Pn) : 1.0;
-	double ber = 0.5 * std::erfc(std::sqrt(snr_linear)); // Модуляция BPSK
-	double current_Luv = std::pow(1.0 - ber, ch->size() * 8);
+			// 2. Рассчитываем SNR и физическое качество связи L(u, v) для текущего принятого пакета
+			double snr_linear = (ph && ph->Pn > 0.0) ? (ph->Pr / ph->Pn) : 1.0;
+			double ber = 0.5 * std::erfc(std::sqrt(snr_linear)); // Модуляция BPSK
+			double current_Luv = std::pow(1.0 - ber, ch->size() * 8);
 
-	// Ссылки на качество связи до соседей v и k
-	auto& Luv = link_quality_neighbors[v];
-	auto& Luk = link_quality_neighbors[k];
+			// Ссылки на качество связи до соседей v и k
+        	auto& Luv = link_quality_neighbors.emplace(v, 1.0).first->second;
+        	auto& Luk = link_quality_neighbors.emplace(k, 1.0).first->second;
 
-	// 3. Работа со множествами принятых пакетов
-	auto& Bvu = neighbors[std::make_pair(v, u)];
-	auto& Bvk = neighbors[std::make_pair(v, k)]; // Исправлено: Bvk вместо Bkv
-	Bvu.insert(ch->uid());
-	Bvk.insert(ch->uid());
+			// 3. Работа со множествами принятых пакетов
+			auto& Bvu = neighbors[std::make_pair(v, u)];
+			auto& Bvk = neighbors[std::make_pair(v, k)]; // Исправлено: Bvk вместо Bkv
+			Bvu.insert(ch->uid());
+			Bvk.insert(ch->uid());
 
-	// 4. Защита от деления на ноль при расчете пересечения множеств
-	double Pvku = 0.0;
-	if (!Bvu.empty()) {
-	    std::vector<uint16_t> common;
-	    std::set_intersection(
-	        Bvu.begin(), Bvu.end(),
-	        Bvk.begin(), Bvk.end(),
-	        std::back_inserter(common)
-	    );
-	    Pvku = static_cast<double>(common.size()) / Bvu.size();
-	}
+			// 4. Защита от деления на ноль при расчете пересечения множеств
+			double Pvku = 0.0;
+			if (!Bvu.empty()) {
+			    std::vector<uint16_t> common;
+			    std::set_intersection(
+			        Bvu.begin(), Bvu.end(),
+			        Bvk.begin(), Bvk.end(),
+			        std::back_inserter(common)
+			    );
+			    Pvku = static_cast<double>(common.size()) / Bvu.size();
+			}
 
-	// 5. Получаем ссылки на вероятности покрытия для k и v
-	auto& probabilityK = coverage_prob[k];
-	auto& probabilityV = coverage_prob[v];
+			// 5. Получаем ссылки на вероятности покрытия для k и v
+			auto& probabilityK = coverage_prob[k];
+			auto& probabilityV = coverage_prob[v];
 
-	// 6. Вычитаем СТАРЫЙ вклад узлов в te_ (используем старые L и старые вероятности)
-	if (probabilityK > 0.0) {
-	    te_ -= Luk * (1.0 - probabilityK);
-	}
-	if (probabilityV > 0.0) {
-	    te_ -= Luv * (1.0 - probabilityV);
-	}
+			// 6. Вычитаем СТАРЫЙ вклад узлов в te_ (используем старые L и старые вероятности)
+			if (probabilityK > 0.0) {
+			    te_ -= Luk * (1.0 - probabilityK);
+			}
+			if (probabilityV > 0.0) {
+			    te_ -= Luv * (1.0 - probabilityV);
+			}
 
-	// 7. Обновляем параметры каналов и вероятностей покрытия
-	Luv = current_Luv; // Обновляем качество связи до v на основе текущего SNR
-	probabilityK = 1.0 - (1.0 - probabilityK) * (1.0 - Pvku);
+			// 7. Обновляем параметры каналов и вероятностей покрытия
+			Luv = current_Luv; // Обновляем качество связи до v на основе текущего SNR
+			probabilityK = 1.0 - (1.0 - probabilityK) * (1.0 - Pvku);
 
-	// 8. Прибавляем НОВЫЙ вклад узлов в te_ (используем новые L и новые вероятности)
-	te_ += Luk * (1.0 - probabilityK);
-	te_ += Luv * (1.0 - probabilityV);
+			// 8. Прибавляем НОВЫЙ вклад узлов в te_ (используем новые L и новые вероятности)
+			te_ += Luk * (1.0 - probabilityK);
+			te_ += Luv * (1.0 - probabilityV);
 
-	// Страховка от отрицательных значений te_ из-за округления
-	if (te_ < 0.0) te_ = 0.0;
+			// Страховка от отрицательных значений te_ из-за округления
+			if (te_ < 0.0) te_ = 0.0;
 
-	// Вывод отладочной информации
-	std::cout << "Pvku: " << Pvku << std::endl;
-	std::cout << "ProbK: " << probabilityK << std::endl;
-	std::cout << "TE: " << te_ << std::endl << std::endl;
+			// Вывод отладочной информации
+			std::cout << "Pvku: " << Pvku << std::endl;
+			std::cout << "ProbK: " << probabilityK << std::endl;
+			std::cout << "TE: " << te_ << std::endl << std::endl;
 
         	// Cancel by timer (Acknowledgement received)
         	if (ch->ptype() == PT_UWCPDFLOODING_NOTIFICATION) {
