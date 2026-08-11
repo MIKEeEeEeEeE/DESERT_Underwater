@@ -27,6 +27,11 @@
 // ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 
+
+#include <set>
+#include <algorithm>
+#include <vector>
+
 #include "uwcpdflooding.h"
 #include "uwcpdflooding-hdr.h"
 #include "uwphysical.h"
@@ -104,7 +109,9 @@ UwCPDflooding::UwCPDflooding()
     , packets_forwarded_(0)
 	, trace_path_(false)
 	, trace_file_path_name_((char *) "trace")
-	, t_delay_(0)
+	, te_(0.0)
+	, t_min_(0.0)
+	, t_max_(0.0)
     , n_dupl_(0)
 	, t_dupl_(0)
     , ttl_traffic_map()
@@ -116,6 +123,8 @@ UwCPDflooding::UwCPDflooding()
     bind("t_dupl_", &t_dupl_);
     bind("optimize_", &optimize_);
 	bind("debug_", &debug_);
+	bind("t_min_", &t_min_);
+	bind("t_max_", &t_max_);
 } /* UwDflooding::UwDflooding */
 
 UwCPDflooding::~UwCPDflooding()
@@ -148,6 +157,7 @@ UwCPDflooding::doForward(Packet *p)
             packet_state &st = it2->second;
             fh->hop() = st.hop;
             fh->hop()++;
+        	fh->prev_prev_hop_ = st.prev_prev_hop_;
             st.is_relayed = true;
             st.timer = nullptr;
         }
@@ -213,119 +223,56 @@ UwCPDflooding::recv(Packet *p)
     hdr_uwcpdflooding *flh = HDR_UWCPDFLOODING(p);
 
     if (!ch->error()) {
-
-    	// Reception history based --> Update P̂_v(k|u), CP_u(k)
-    	auto it1 = coverage_map.find(std::make_pair(ch->prev_hop_, ipAddr_));
-    	if (it1 != coverage_map.end()) {
-    		++it1->second;
-    	} else {
-    		it1 = coverage_map.emplace(std::make_pair(ch->prev_hop_, ipAddr_), 1).first;
-    	}
-
-    	auto it2 = coverage_map.find(std::make_pair(flh->prev_prev_hop(), ch->prev_hop_));
-    	if (it2 != coverage_map.end()) {
-    		++it2->second;
-    	} else {
-    		it2 = coverage_map.emplace(std::make_pair(flh->prev_prev_hop(), ch->prev_hop_), 1).first;
-    	}
-
-    	auto it3 = estimate_coverage_probability_map.find(std::make_pair(flh->prev_prev_hop(), ch->prev_hop_));
-    	if (it3 != estimate_coverage_probability_map.end()) {
-    		it3->second = 1.0 - (1.0 - it3->second) * (1.0 - static_cast<double>(it2->second) / it1->second);
-    	} else {
-    		it3 = estimate_coverage_probability_map.emplace(
-				std::make_pair(flh->prev_prev_hop(), ch->prev_hop_),
-				static_cast<double>(it2->second) / it1->second
-			).first;
-    	}
-
-
-    	for (const auto &entry : coverage_map) {
-    		uint16_t from = entry.first.first;
-    		uint16_t to = entry.first.second;
-    		size_t count = entry.second;
-    		std::cout << "from=" << from
-					   << "::to=" << to
-					   << "::count=" << count
-					   << std::endl;
-    	}
-
-    	for (const auto &entry : estimate_coverage_probability_map) {
-    		uint16_t from = entry.first.first;
-    		uint16_t to = entry.first.second;
-    		size_t count = entry.second;
-    		std::cout << "from=" << from
-					   << "::to=" << to
-					   << "::probability=" << count
-					   << std::endl;
-    	}
-
-    	// Update link quality metric using SNR metric
-    	ClMsgStats stats_clmsg = ClMsgStats(stats_phy_id, UNICAST);
-    	sendSyncClMsg(&stats_clmsg);
-    	double snr_db = 0.0;
-    	std::cout << stats_clmsg.getStats()->type_id << std::endl;
-    	if (stats_clmsg.getStats()->type_id ==
-				(int) StatsEnum::STATS_PHY_LAYER) {
-    		const UwPhysicalStats *stats =
-					dynamic_cast<const UwPhysicalStats *>(
-							stats_clmsg.getStats());
-    		if (stats != 0) {
-    			if (!stats->has_error) {
-    				 snr_db = 10 *
-							log10(stats->last_rx_power /
-									(stats->last_noise_power +
-											stats->last_interf_power));
-    				//if (debug_)
-    				if (1)
-    					std::cout
-								<< NOW << "::Node=" << (int) ipAddr_
-								<< "::Received packet with"
-								<< "::rx power=" << stats->last_rx_power
-								<< "::noise=" << stats->last_noise_power
-								<< "::interference=" << stats->last_interf_power
-								<< "::SNR=" << snr_db << std::endl;
-    			}
-    		}
-    	}
-
-    	auto it = link_quality_map.find(ch->prev_hop_);
-    	if (it == link_quality_map.end()) {
-    		it = link_quality_map.insert(std::make_pair(ch->prev_hop_, snr_db)).first;
-    	}
-
-    	// Update Transmission Efficiency
-    	te_ = 0;
-    	for (auto const& kv : link_quality_map)
-    	{
-    		te_ += kv.second * (1 - estimate_coverage_probability_map[std::make_pair(kv.first, ipAddr_)]);
-    	}
-
-        // Cancel by timer (Notification received)
-        if (ch->ptype() == PT_UWCPDFLOODING_NOTIFICATION) {
-            if (trace_path_)
-                this->writePathInTrace(p, "RECV_NTFC");
-
-            map_all_packets::iterator it2 = my_all_packets_.find(iph->saddr());
-        	if (it2 != my_all_packets_.end()) {
-        		map_packets_state::iterator it3 = it2->second.find(ch->uid());
-        		if (it3 != it2->second.end()) {
-        			if (it3->second.timer != nullptr) {
-        				it3->second.timer->force_cancel();
-        				Packet::free(it3->second.timer->pkt());
-        				delete it3->second.timer;
-        				it3->second.timer = nullptr;
-        			}
-        			if (trace_path_)
-        				this->writePathInTrace(p, "CNCL_FRWD");
-        		}
-        	}
-            Packet::free(p);
-            return;
-        }
         if (ch->direction() == hdr_cmn::UP) {
-            if (trace_path_)
-                this->writePathInTrace(p, "RECV_DTA");
+
+        	uint8_t u = ipAddr_;
+        	uint8_t v = ch->prev_hop_;
+        	uint8_t k = flh->prev_prev_hop_;
+        	auto& Bvu = neighbors[make_pair(v, u)];
+        	auto& Bvk = neighbors[make_pair(v, k)];
+        	Bvu.insert(ch->uid());
+        	Bvk.insert(ch->uid());
+        	std::vector<uint16_t> common;
+        	std::set_intersection(
+				Bvu.begin(), Bvu.end(),
+				Bvk.begin(), Bvk.end(),
+				std::back_inserter(common)
+			);
+        	const double Pvku = static_cast<double>(common.size()) / Bvu.size();
+        	auto& probability = coverage_prob[k];
+        	te_ -= probability;
+        	probability = 1.0 - (1.0 - probability) * (1.0 - Pvku);
+			te_ += probability;
+        	std::cout << probability << std::endl;
+        	std::cout << Pvku << std::endl;
+
+
+
+
+        	// Cancel by timer (Acknowledgement received)
+        	if (ch->ptype() == PT_UWCPDFLOODING_NOTIFICATION) {
+        		if (trace_path_)
+        			this->writePathInTrace(p, "RECV_ACK");
+
+        		map_all_packets::iterator it2 = my_all_packets_.find(iph->saddr());
+        		if (it2 != my_all_packets_.end()) {
+        			map_packets_state::iterator it3 = it2->second.find(ch->uid());
+        			if (it3 != it2->second.end()) {
+        				if (it3->second.timer != nullptr) {
+        					it3->second.timer->force_cancel();
+        					Packet::free(it3->second.timer->pkt());
+        					delete it3->second.timer;
+        					it3->second.timer = nullptr;
+        				}
+        				if (trace_path_)
+        					this->writePathInTrace(p, "CNCL_FRWD");
+        			}
+        		}
+        		Packet::free(p);
+        		return;
+        	}
+        	if (trace_path_)
+        		this->writePathInTrace(p, "RECV_DTA");
 
             if (iph->daddr() == 0) {
                 std::cerr << "Destination address not set." << std::endl;
@@ -341,10 +288,10 @@ UwCPDflooding::recv(Packet *p)
                 Packet *notif = Packet::alloc();
 
             	hdr_uwcpdflooding *flh_ = HDR_UWCPDFLOODING(notif);
-            	flh_->prev_prev_hop() = ch->prev_hop_;
+            	flh_->prev_prev_hop_ = ch->prev_hop_;
 
-                hdr_cmn *ch_ = HDR_CMN(notif);
-                ch_->ptype() = PT_UWCPDFLOODING_NOTIFICATION;
+            	hdr_cmn *ch_ = HDR_CMN(notif);
+            	ch_->ptype() = PT_UWCPDFLOODING_NOTIFICATION;
                 ch_->size() = 0;
             	ch_->uid() = ch->uid();
                 ch_->direction() = hdr_cmn::DOWN;
@@ -385,7 +332,7 @@ UwCPDflooding::recv(Packet *p)
 
                 // SendDown
                 ch->direction() = hdr_cmn::DOWN;
-            	flh->prev_prev_hop() = ch->prev_hop_;
+            	flh->prev_prev_hop_ = ch->prev_hop_;
                 ch->prev_hop_ = ipAddr_;
                 ch->next_hop() = UWIP_BROADCAST;
                 flh->ttl()--;
@@ -414,8 +361,9 @@ UwCPDflooding::recv(Packet *p)
                             new_state.is_relayed = false;
                         	new_state.timestamp = Scheduler::instance().clock();
                             new_state.timer = new UwcpdfloodingHandler(this, p->copy());
+                        	new_state.prev_prev_hop_ = ch->prev_hop_;
 
-                            double delay = t_delay_ / (1.0 + te_);
+                        	double delay = uniform(t_min_, t_max_) * (1.0 + te_);
                             new_state.timer->sched(delay);
 
                             it2->second.insert(std::pair<uint16_t, packet_state>(ch->uid(), new_state));
@@ -491,8 +439,9 @@ UwCPDflooding::recv(Packet *p)
                     new_state.is_relayed = false;
                     new_state.timestamp = Scheduler::instance().clock();
                     new_state.timer = new UwcpdfloodingHandler(this, p->copy());
+                	new_state.prev_prev_hop_ = ch->prev_hop_;
 
-                	double delay = t_delay_ / (1.0 + te_);
+                	double delay = uniform(t_min_, t_max_) * (1.0 + te_);
                     new_state.timer->sched(delay);
 
                     map_packets_state new_map;
@@ -516,7 +465,7 @@ UwCPDflooding::recv(Packet *p)
             // Unicast packet not for this node - forward
             if (iph->daddr() != ipAddr_) {
                 ch->direction() = hdr_cmn::DOWN;
-            	flh->prev_prev_hop() = ch->prev_hop_;
+            	flh->prev_prev_hop_ = ch->prev_hop_;
                 ch->prev_hop_ = ipAddr_;
                 ch->next_hop() = UWIP_BROADCAST;
                 flh->ttl()--;
@@ -543,8 +492,9 @@ UwCPDflooding::recv(Packet *p)
                         	new_state.is_relayed = false;
                         	new_state.timestamp = Scheduler::instance().clock();
                         	new_state.timer = new UwcpdfloodingHandler(this, p->copy());
+                        	new_state.prev_prev_hop_ = ch->prev_hop_;
 
-                        	double delay = t_delay_ / (1.0 + te_);
+                        	double delay = uniform(t_min_, t_max_) * (1.0 + te_);
                         	new_state.timer->sched(delay);
 
                         	it2->second.insert(std::pair<uint16_t, packet_state>(ch->uid(), new_state));
@@ -609,8 +559,9 @@ UwCPDflooding::recv(Packet *p)
                 	new_state.is_relayed = false;
                 	new_state.timestamp = Scheduler::instance().clock();
                 	new_state.timer = new UwcpdfloodingHandler(this, p->copy());
+                	new_state.prev_prev_hop_ = ch->prev_hop_;
 
-                	double delay = t_delay_ / (1.0 + te_);
+                	double delay = uniform(t_min_, t_max_) * (1.0 + te_);
                 	new_state.timer->sched(delay);
 
                 	map_packets_state new_map;
@@ -657,7 +608,7 @@ UwCPDflooding::recv(Packet *p)
             }
 
             // iph->daddr() != ipAddr_ - forward the packet
-        	flh->prev_prev_hop() = ch->prev_hop_;
+        	flh->prev_prev_hop_ = ch->prev_hop_;
         	ch->prev_hop_ = ipAddr_;
             ch->next_hop() = UWIP_BROADCAST;
             ch->size() += sizeof(hdr_uwcpdflooding);

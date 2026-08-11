@@ -31,6 +31,8 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <algorithm>
+#include <set>
 
 class UwcpdfloodingHandler;
 /**
@@ -128,13 +130,6 @@ protected:
      */
     uint8_t getTTL(Packet *p) const;
 
-    /**
-     * Forward a packet after timer expiration.
-     *
-     * @param p Packet to forward.
-     */
-    void doForward(Packet *p);
-
 private:
     // Variables
 
@@ -152,36 +147,34 @@ private:
                                   in the disk. */
     std::ostringstream osstream_; /**< Used to convert to string. */
 
-	int debug_;
-	int stats_phy_id;
-	double t_delay_;
+	// int debug_;
+	// int stats_phy_id;
+	// double t_delay_;
     double n_dupl_; /**< Number of duplicates threshold. */
 	double t_dupl_; /**< Time window for duplicates */
 	double te_;  /**< Transmission Efficiency */
 
-	std::map<std::pair<uint16_t, uint16_t>, size_t> // (from, to)
-		coverage_map;
-	std::map<std::pair<uint16_t, uint16_t>, double>
-		estimate_coverage_probability_map;
-	std::map<uint16_t, double> link_quality_map;
+	typedef struct {
+		uint8_t hop;
+		double nd;
+		double timestamp;
+		uint8_t prev_prev_hop_;
+		bool is_relayed;
+		UwdcpfloodingHandler* timer;
+	} packet_state;
 
-    typedef struct {
-        uint8_t hop;
-        double nd;
-    	double timestamp;
-        bool is_relayed;
-        UwcpdfloodingHandler* timer;
-    } packet_state;
+	typedef std::map<uint16_t, packet_state> map_packets_state;
+	typedef std::map<uint8_t, map_packets_state>
+		map_all_packets; /**< Typedef for a map of the packet
+							  (saddr, map_packets_state). */
 
-    typedef std::map<uint16_t, packet_state> map_packets_state;
-    typedef std::map<uint8_t, map_packets_state>
-        map_all_packets; /**< Typedef for a map of the packet
-                              (saddr, map_packets_state). */
-
-    map_all_packets my_all_packets_; /**< Map of all packets (forwarded + pending). */
+	map_all_packets my_all_packets_; /**< Map of all packets (forwarded + pending). */
 
     std::map<uint16_t, uint8_t>
             ttl_traffic_map; /**< Map with ttl per traffic. */
+
+	typedef std::map<std::pair<uint16_t, uint16_t>, std::set<uint16_t>> from_to_;
+	typedef std::map<uint8_t, double> coverage_prob;
 
     /**
      * Copy constructor declared as private. It is not possible to create a new
@@ -195,6 +188,13 @@ private:
      * Assignment operator declared as private.
      */
     UwCPDflooding &operator=(const UwCPDflooding &);
+
+	/**
+	 * Forward a packet after timer expiration.
+	 *
+	 * @param p Packet to forward.
+	 */
+	void doForward(Packet *p);
 };
 
 class UwcpdfloodingHandler : public TimerHandler

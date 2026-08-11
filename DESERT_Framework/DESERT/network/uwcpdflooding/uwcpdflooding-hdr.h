@@ -21,7 +21,7 @@ typedef struct hdr_uwcpdflooding {
 
 	uint8_t ttl_; /**< Time to live of the packet. */
 	uint8_t hop_; /**< Count-up of hops. */
-	nsaddr_t prev_prev_hop_{};
+	uint8_t prev_prev_hop_;
 	static int offset_; /**< Required by the PacketHeaderManager. */
 
 	/**
@@ -49,12 +49,6 @@ typedef struct hdr_uwcpdflooding {
 	offset()
 	{
 		return offset_;
-	}
-
-	inline nsaddr_t &
-	prev_prev_hop()
-	{
-		return prev_prev_hop_;
 	}
 
 	inline static struct hdr_uwcpdflooding *
