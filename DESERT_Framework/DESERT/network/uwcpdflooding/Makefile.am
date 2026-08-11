@@ -43,7 +43,7 @@ libuwcpdflooding_la_SOURCES = initlib.cpp\
 libuwcpdflooding_la_CPPFLAGS = @NS_CPPFLAGS@ @NSMIRACLE_CPPFLAGS@ @DESERT_CPPFLAGS@
 libuwcpdflooding_la_LDFLAGS =  @NS_LDFLAGS@ @NSMIRACLE_LDFLAGS@ @DESERT_LDFLAGS@
 libuwcpdflooding_la_LIBADD = @NS_LIBADD@ @NSMIRACLE_LIBADD@ @DESERT_LIBADD@ \
-						  @DESERT_UWCBR_LIBADD@ @@DESERT_UWOPTICAL_PROPAGATION_LIBADD@@
+						  @DESERT_UWCBR_LIBADD@
 
 nodist_libuwcpdflooding_la_SOURCES = InitTcl.cc
 
