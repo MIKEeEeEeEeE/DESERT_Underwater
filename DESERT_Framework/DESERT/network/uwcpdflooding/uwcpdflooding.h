@@ -174,7 +174,6 @@ private:
 
 	std::map<std::pair<uint16_t, uint16_t>, std::set<uint16_t>> neighbors;
 	std::map<uint8_t, double> coverage_prob;
-
 	std::map<uint8_t, double> link_quality_neighbors;
 
     /**

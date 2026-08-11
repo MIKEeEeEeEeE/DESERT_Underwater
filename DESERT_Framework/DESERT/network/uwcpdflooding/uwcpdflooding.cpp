@@ -222,65 +222,64 @@ UwCPDflooding::recv(Packet *p)
     if (!ch->error()) {
         if (ch->direction() == hdr_cmn::UP) {
 
-			uint8_t u = ipAddr_;
-			uint8_t v = ch->prev_hop_;
-			uint8_t k = flh->prev_prev_hop_;
+        	uint8_t u = ipAddr_;
+        	uint8_t v = ch->prev_hop_;
+        	uint8_t prev_k = flh->prev_prev_hop_; // Переименовали, чтобы избегнуть shadowing
 
-			double snr_linear = (ph && ph->Pn > 0.0) ? (ph->Pr / ph->Pn) : 1.0;
-			double ber = 0.5 * std::erfc(std::sqrt(snr_linear));
-			double current_Luv = std::pow(1.0 - ber, ch->size() * 8);
+        	// 1. Рассчитываем и обновляем качество связи с прямым соседом v
+        	// double snr_linear = (ph && ph->Pn > 0.0) ? (ph->Pr / ph->Pn) : 1.0;
+        	// double ber = 0.5 * std::erfc(std::sqrt(snr_linear));
+        	// double link_quality = std::pow(1.0 - ber, ch->size() * 8);
+        	double link_quality = 1.0;
 
-        	auto& Luv = link_quality_neighbors.emplace(v, 1.0).first->second;
-        	auto& Luk = link_quality_neighbors.emplace(k, 1.0).first->second;
+        	link_quality_neighbors[v] = link_quality; // Записываем Luv
 
-			auto& Bvu = neighbors[std::make_pair(v, u)];
-			auto& Bvk = neighbors[std::make_pair(v, k)];
+        	auto& Bvu = neighbors[std::make_pair(v, u)];
+        	auto& Bkv = neighbors[std::make_pair(prev_k, v)];
 
-			Bvu.insert(ch->uid());
-			Bvk.insert(ch->uid());
+        	Bvu.insert(ch->uid());
+        	Bkv.insert(ch->uid());
 
-			double Pvku = 0.0;
-			if (!Bvu.empty()) {
-			    std::vector<uint16_t> common;
-			    std::set_intersection(
-			        Bvu.begin(), Bvu.end(),
-			        Bvk.begin(), Bvk.end(),
-			        std::back_inserter(common)
-			    );
-			    Pvku = static_cast<double>(common.size()) / Bvu.size();
-			}
+        	// 2. Рассчитываем вероятность покрытия и TE
+        	te_ = 0.0;
 
-        	auto& probabilityK = coverage_prob[k];
-        	auto& probabilityV = coverage_prob[v];
+        	for (const auto& pair : link_quality_neighbors) {
+        		uint8_t curr_k = pair.first;        // Узел k из списка соседей u
+        		double Luk = pair.second;           // Качество связи L(u, k)
 
-        	if (probabilityK < 1.0) {
-        		te_ -= Luk * (1.0 - probabilityK);
+        		auto& Bvk = neighbors[std::make_pair(v, curr_k)];
+        		auto& cprobK = coverage_prob[curr_k]; // Ссылка на CPu(k)
+
+        		if (curr_k == v) {
+        			cprobK = 1.0; // Узел v точно получил пакет
+        		} else {
+        			std::vector<uint16_t> common;
+        			std::set_intersection(
+						Bvu.begin(), Bvu.end(),
+						Bvk.begin(), Bvk.end(),
+						std::back_inserter(common)
+					);
+
+        			double Pvku = 0.0;
+        			if (!Bvu.empty()) {
+        				Pvku = static_cast<double>(common.size()) / Bvu.size();
+        			}
+
+        			// Корректное обновление CPu(k)
+        			cprobK = 1.0 - (1.0 - cprobK) * (1.0 - Pvku);
+
+        			// Предотвращаем застревание cprobK в чистой 1.0 (защита от машинного нуля)
+        			if (cprobK > 0.999) {
+        				cprobK = 0.999;
+        			}
+        		}
+
+        		// TE считается на основе НАКОПЛЕННОГО покрытия cprobK:
+        		// TE = Sum( Luk * (1 - CPu(k)) )
+        		te_ += Luk * (1.0 - cprobK);
         	}
-        	if (probabilityV < 1.0) {
-        		te_ -= Luv * (1.0 - probabilityV);
-        	}
 
-        	Luv = current_Luv;
-
-        	double alpha = 0.2;
-        	probabilityK = (1.0 - alpha) * probabilityK + alpha * Pvku;
-
-        	if (probabilityK > 0.99) {
-        		probabilityK = 0.99;
-        	}
-
-        	te_ += Luk * (1.0 - probabilityK);
-        	te_ += Luv * (1.0 - probabilityV);
-
-        	if (te_ < 1e-9) {
-        		te_ = 0.0;
-        	}
-
-        	std::cout << "Luk" << Luk << std::endl;
-        	std::cout << "Luv" << Luv << std::endl;
-			std::cout << "Pvku: " << Pvku << std::endl;
-			std::cout << "ProbK: " << probabilityK << std::endl;
-			std::cout << "TE: " << te_ << std::endl << std::endl;
+        	std::cout << "TE: " << te_ << std::endl << std::endl;
 
         	// Cancel by timer (Acknowledgement received)
         	if (ch->ptype() == PT_UWCPDFLOODING_NOTIFICATION) {
