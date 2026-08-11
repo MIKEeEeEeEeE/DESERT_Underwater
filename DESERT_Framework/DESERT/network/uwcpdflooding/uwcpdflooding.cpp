@@ -103,7 +103,6 @@ UwcpdfloodingHandler::pkt() const
 
 UwCPDflooding::UwCPDflooding()
     : ipAddr_(0)
-	, debug_(0)
     , ttl_(10)
     , optimize_(1)
     , packets_forwarded_(0)
@@ -115,10 +114,8 @@ UwCPDflooding::UwCPDflooding()
     , n_dupl_(0)
 	, t_dupl_(0)
     , ttl_traffic_map()
-	, stats_phy_id(0)
 { // Binding to TCL variables.
     bind("ttl_", &ttl_);
-	bind("t_delay_", &t_delay_);
     bind("n_dupl_", &n_dupl_);
     bind("t_dupl_", &t_dupl_);
     bind("optimize_", &optimize_);
@@ -228,8 +225,8 @@ UwCPDflooding::recv(Packet *p)
         	uint8_t u = ipAddr_;
         	uint8_t v = ch->prev_hop_;
         	uint8_t k = flh->prev_prev_hop_;
-        	auto& Bvu = neighbors[make_pair(v, u)];
-        	auto& Bvk = neighbors[make_pair(v, k)];
+        	auto& Bvu = neighbors[std::make_pair(v, u)];
+        	auto& Bvk = neighbors[std::make_pair(v, k)];
         	Bvu.insert(ch->uid());
         	Bvk.insert(ch->uid());
         	std::vector<uint16_t> common;
@@ -243,11 +240,9 @@ UwCPDflooding::recv(Packet *p)
         	te_ -= probability;
         	probability = 1.0 - (1.0 - probability) * (1.0 - Pvku);
 			te_ += probability;
-        	std::cout << probability << std::endl;
         	std::cout << Pvku << std::endl;
-
-
-
+        	std::cout << probability << std::endl;
+        	std::cout << "\n" << std::endl;
 
         	// Cancel by timer (Acknowledgement received)
         	if (ch->ptype() == PT_UWCPDFLOODING_NOTIFICATION) {

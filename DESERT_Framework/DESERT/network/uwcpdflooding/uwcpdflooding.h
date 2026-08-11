@@ -147,12 +147,11 @@ private:
                                   in the disk. */
     std::ostringstream osstream_; /**< Used to convert to string. */
 
-	// int debug_;
-	// int stats_phy_id;
-	// double t_delay_;
     double n_dupl_; /**< Number of duplicates threshold. */
 	double t_dupl_; /**< Time window for duplicates */
 	double te_;  /**< Transmission Efficiency */
+	double t_min_;
+	double t_max_;
 
 	typedef struct {
 		uint8_t hop;
@@ -160,7 +159,7 @@ private:
 		double timestamp;
 		uint8_t prev_prev_hop_;
 		bool is_relayed;
-		UwdcpfloodingHandler* timer;
+		UwcpdfloodingHandler* timer;
 	} packet_state;
 
 	typedef std::map<uint16_t, packet_state> map_packets_state;
@@ -173,8 +172,8 @@ private:
     std::map<uint16_t, uint8_t>
             ttl_traffic_map; /**< Map with ttl per traffic. */
 
-	typedef std::map<std::pair<uint16_t, uint16_t>, std::set<uint16_t>> from_to_;
-	typedef std::map<uint8_t, double> coverage_prob;
+	std::map<std::pair<uint16_t, uint16_t>, std::set<uint16_t>> neighbors;
+	std::map<uint8_t, double> coverage_prob;
 
     /**
      * Copy constructor declared as private. It is not possible to create a new
