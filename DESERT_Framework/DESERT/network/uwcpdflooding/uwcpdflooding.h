@@ -152,6 +152,7 @@ private:
 	double te_;  /**< Transmission Efficiency */
 	double t_min_;
 	double t_max_;
+	double time_window = 100;
 
 	typedef struct {
 		uint8_t hop;
@@ -160,6 +161,8 @@ private:
 		uint8_t prev_prev_hop_;
 		bool is_relayed;
 		UwcpdfloodingHandler* timer;
+		std::map<uint8_t, double> coverage_map;
+		std::map<uint8_t, double> coverage_timestamps;
 	} packet_state;
 
 	typedef std::map<uint16_t, packet_state> map_packets_state;
