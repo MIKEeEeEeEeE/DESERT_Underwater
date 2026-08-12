@@ -154,8 +154,6 @@ UwCPDflooding::doForward(Packet *p)
             packet_state &st = it2->second;
 
             auto& local_cp = st.coverage_map;
-            uint8_t u = ipAddr_;
-            uint8_t v = ch->prev_hop_;
 
             te_ = 0.0;
             for (const auto& pair : link_quality_neighbors) {
@@ -242,19 +240,13 @@ UwCPDflooding::recv(Packet *p)
         if (ch->direction() == hdr_cmn::UP) {
 
         	// 1. Calculate SNR in linear scale
-        	double snr_linear = (ph && ph->Pn > 0.0) ? (ph->Pr / ph->Pn) : 1.0;
-        	std::cout << snr_linear << std::endl;
-
+        	double snr_linear = (ph && ph->Pn > 0.0) ? (ph->Pr / ph->Pn) : 1.0; // 64.5425
         	// 2. Compute BER
-        	double ber = 0.5 * std::erfc(std::sqrt(snr_linear));
-        	std::cout << ber << std::endl;
-
+        	double ber = 0.5 * std::erfc(std::sqrt(snr_linear)); // 3.24861e-30
         	// 3. Compute Packet Success Rate (Luv) avoiding float precision loss
-        	double num_bits = static_cast<double>(ch->size() * 8);
-        	std::cout << num_bits << std::endl;
+        	double num_bits = static_cast<double>(ch->size() * 8); // 1040
 
-        	double link_quality = (num_bits > 0.0) ? std::exp(num_bits * std::log1p(-ber)) : 1.0;
-        	std::cout << link_quality << std::endl;
+        	double link_quality = (num_bits > 0.0) ? std::exp(num_bits * std::log1p(-ber)) : 1.0; // 1
 
         	uint8_t u = ipAddr_;
         	uint8_t v = ch->prev_hop_;
@@ -287,7 +279,7 @@ UwCPDflooding::recv(Packet *p)
                         	double Luk = pair.second;
                         	if (curr_k == v) {
                         		local_cp[curr_k] = 1.0;
-                        		st.coverage_timestamps[curr_k] = current_time; // Обновляем время
+                        		it3->second.coverage_timestamps[curr_k] = Scheduler::instance().clock(); // Обновляем время
                         		continue;
                         	}
                             double cprobK = local_cp[curr_k];
@@ -423,13 +415,13 @@ UwCPDflooding::recv(Packet *p)
 
                         		if (curr_k == v) {
                         			local_cp[curr_k] = 1.0;
-                        			st.coverage_timestamps[curr_k] = current_time; // Обновляем время
+                        			new_state.coverage_timestamps[curr_k] = current_time; // Обновляем время
                         			continue;
                         		}
 
                         		// --- ПРОВЕРКА ВРЕМЕННОГО ОКНА ---
-                        		auto time_it = st.coverage_timestamps.find(curr_k);
-                        		if (time_it != st.coverage_timestamps.end()) {
+                        		auto time_it = new_state.coverage_timestamps.find(curr_k);
+                        		if (time_it != new_state.coverage_timestamps.end()) {
                         			// Если запись вышла за пределы временного окна — обнуляем её
                         			if (current_time - time_it->second > time_window) {
                         				local_cp[curr_k] = 0.0;
@@ -451,7 +443,7 @@ UwCPDflooding::recv(Packet *p)
 
                         				cprobK = 1.0 - (1.0 - cprobK) * (1.0 - Pvku);
                         				local_cp[curr_k] = cprobK;
-                        				st.coverage_timestamps[curr_k] = current_time; // Фиксируем время обновления
+                        				new_state.coverage_timestamps[curr_k] = current_time; // Фиксируем время обновления
                         			}
                         		}
 
@@ -589,13 +581,13 @@ UwCPDflooding::recv(Packet *p)
 
                 		if (curr_k == v) {
                 			local_cp[curr_k] = 1.0;
-                			st.coverage_timestamps[curr_k] = current_time; // Обновляем время
+                			new_state.coverage_timestamps[curr_k] = current_time; // Обновляем время
                 			continue;
                 		}
 
                 		// --- ПРОВЕРКА ВРЕМЕННОГО ОКНА ---
-                		auto time_it = st.coverage_timestamps.find(curr_k);
-                		if (time_it != st.coverage_timestamps.end()) {
+                		auto time_it = new_state.coverage_timestamps.find(curr_k);
+                		if (time_it != new_state.coverage_timestamps.end()) {
                 			// Если запись вышла за пределы временного окна — обнуляем её
                 			if (current_time - time_it->second > time_window) {
                 				local_cp[curr_k] = 0.0;
@@ -617,7 +609,7 @@ UwCPDflooding::recv(Packet *p)
 
                 				cprobK = 1.0 - (1.0 - cprobK) * (1.0 - Pvku);
                 				local_cp[curr_k] = cprobK;
-                				st.coverage_timestamps[curr_k] = current_time; // Фиксируем время обновления
+                				new_state.coverage_timestamps[curr_k] = current_time; // Фиксируем время обновления
                 			}
                 		}
 
@@ -684,13 +676,13 @@ UwCPDflooding::recv(Packet *p)
 
                         		if (curr_k == v) {
                         			local_cp[curr_k] = 1.0;
-                        			st.coverage_timestamps[curr_k] = current_time; // Обновляем время
+                        			new_state.coverage_timestamps[curr_k] = current_time; // Обновляем время
                         			continue;
                         		}
 
                         		// --- ПРОВЕРКА ВРЕМЕННОГО ОКНА ---
-                        		auto time_it = st.coverage_timestamps.find(curr_k);
-                        		if (time_it != st.coverage_timestamps.end()) {
+                        		auto time_it = new_state.coverage_timestamps.find(curr_k);
+                        		if (time_it != new_state.coverage_timestamps.end()) {
                         			// Если запись вышла за пределы временного окна — обнуляем её
                         			if (current_time - time_it->second > time_window) {
                         				local_cp[curr_k] = 0.0;
@@ -712,7 +704,7 @@ UwCPDflooding::recv(Packet *p)
 
                         				cprobK = 1.0 - (1.0 - cprobK) * (1.0 - Pvku);
                         				local_cp[curr_k] = cprobK;
-                        				st.coverage_timestamps[curr_k] = current_time; // Фиксируем время обновления
+                        				new_state.coverage_timestamps[curr_k] = current_time; // Фиксируем время обновления
                         			}
                         		}
 
@@ -841,13 +833,13 @@ UwCPDflooding::recv(Packet *p)
 
                 		if (curr_k == v) {
                 			local_cp[curr_k] = 1.0;
-                			st.coverage_timestamps[curr_k] = current_time; // Обновляем время
+                			new_state.coverage_timestamps[curr_k] = current_time; // Обновляем время
                 			continue;
                 		}
 
                 		// --- ПРОВЕРКА ВРЕМЕННОГО ОКНА ---
-                		auto time_it = st.coverage_timestamps.find(curr_k);
-                		if (time_it != st.coverage_timestamps.end()) {
+                		auto time_it = new_state.coverage_timestamps.find(curr_k);
+                		if (time_it != new_state.coverage_timestamps.end()) {
                 			// Если запись вышла за пределы временного окна — обнуляем её
                 			if (current_time - time_it->second > time_window) {
                 				local_cp[curr_k] = 0.0;
@@ -869,7 +861,7 @@ UwCPDflooding::recv(Packet *p)
 
                 				cprobK = 1.0 - (1.0 - cprobK) * (1.0 - Pvku);
                 				local_cp[curr_k] = cprobK;
-                				st.coverage_timestamps[curr_k] = current_time; // Фиксируем время обновления
+                				new_state.coverage_timestamps[curr_k] = current_time; // Фиксируем время обновления
                 			}
                 		}
 
