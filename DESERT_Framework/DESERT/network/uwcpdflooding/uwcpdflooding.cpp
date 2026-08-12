@@ -168,7 +168,6 @@ UwCPDflooding::doForward(Packet *p)
 					te_ += Luk * (1.0 - cprobK);
             }
 
-
             fh->hop() = st.hop;
             fh->hop()++;
             fh->prev_prev_hop_ = st.prev_prev_hop_;
