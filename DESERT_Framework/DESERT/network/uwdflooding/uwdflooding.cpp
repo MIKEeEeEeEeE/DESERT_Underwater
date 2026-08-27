@@ -96,8 +96,6 @@ UwdfloodingHandler::pkt() const
 
 UwDflooding::UwDflooding()
     : ipAddr_(0)
-    , ttl_(10)
-    , optimize_(1)
     , packets_forwarded_(0)
 	, trace_path_(false)
 	, trace_file_path_name_((char *) "trace")
@@ -105,14 +103,11 @@ UwDflooding::UwDflooding()
     , t_min_(0)
     , n_dupl_(0)
 	, t_dupl_(0)
-    , ttl_traffic_map()
 { // Binding to TCL variables.
-    bind("ttl_", &ttl_);
     bind("t_max_", &t_max_);
     bind("t_min_", &t_min_);
     bind("n_dupl_", &n_dupl_);
     bind("t_dupl_", &t_dupl_);
-    bind("optimize_", &optimize_);
 } /* UwDflooding::UwDflooding */
 
 UwDflooding::~UwDflooding()
@@ -194,12 +189,6 @@ UwDflooding::command(int argc, const char *const *argv)
 			trace_file_path_.close();
 			return TCL_OK;
 		}
-	} else if (argc == 4) {
-		if (strcasecmp(argv[1], "addTtlPerTraffic") == 0) {
-			ttl_traffic_map[static_cast<uint16_t>(atoi(argv[2]))] =
-					static_cast<uint8_t>(atoi(argv[3]));
-			return TCL_OK;
-		}
 	}
 	return Module::command(argc, argv);
 } /* UwDflooding::command */
@@ -268,7 +257,6 @@ UwDflooding::recv(Packet *p)
 
                 sendDown(notif);
 
-            	flh->ttl()--;
                 if (trace_path_)
                     this->writePathInTrace(p, "SDUP_DTA");
                 sendUp(p);
@@ -295,128 +283,110 @@ UwDflooding::recv(Packet *p)
                 ch->direction() = hdr_cmn::DOWN;
                 ch->prev_hop_ = ipAddr_;
                 ch->next_hop() = UWIP_BROADCAST;
-                flh->ttl()--;
                 ch->size() += sizeof(hdr_uwdflooding);
 
-                if (flh->ttl() <= 0) {
-                    if (trace_path_)
-                        this->writePathInTrace(p, "DROP_TTL");
-                    drop(p, 1, TTL_EQUALS_TO_ZERO);
-                    return;
-                }
+                map_all_packets::iterator it2 =
+                    my_all_packets_.find(iph->saddr());
 
-                if (optimize_) {
-                    map_all_packets::iterator it2 =
-                    	my_all_packets_.find(iph->saddr());
+                if (it2 != my_all_packets_.end()) {
+                    map_packets_state::iterator it3 =
+                        it2->second.find(ch->uid());
 
-                    if (it2 != my_all_packets_.end()) {
-                        map_packets_state::iterator it3 =
-                        	it2->second.find(ch->uid());
+                    if (it3 == it2->second.end()) {
+                        // Known source but new packet -> add to map and schedule forwarding
+                        packet_state new_state;
+                        new_state.hop = flh->hop();
+                        new_state.nd = 0;
+                        new_state.is_relayed = false;
+                        new_state.timestamp = Scheduler::instance().clock();
+                        new_state.timer = new UwdfloodingHandler(this, p->copy());
 
-                        if (it3 == it2->second.end()) {
-                            // Known source but new packet -> add to map and schedule forwarding
-                            packet_state new_state;
-                            new_state.hop = flh->hop();
-                            new_state.nd = 0;
-                            new_state.is_relayed = false;
-                        	new_state.timestamp = Scheduler::instance().clock();
-                            new_state.timer = new UwdfloodingHandler(this, p->copy());
+                        double delay = uniform(t_min_, t_max_);
+                        new_state.timer->sched(delay);
 
-                            double delay = uniform(t_min_, t_max_);
-                            new_state.timer->sched(delay);
+                        it2->second.insert(std::pair<uint16_t, packet_state>(ch->uid(), new_state));
 
-                            it2->second.insert(std::pair<uint16_t, packet_state>(ch->uid(), new_state));
+                        if (trace_path_)
+                            this->writePathInTrace(p, "SCHD_DTA");
+                        Packet::free(p);
+                        return;
+                    }
 
-                            if (trace_path_)
-                            	this->writePathInTrace(p, "SCHD_DTA");
-                        	Packet::free(p);
-                            return;
-                        }
+                    // Packet already in map
+                    packet_state &st = it3->second;
 
-                        // Packet already in map
-                        packet_state &st = it3->second;
-
-                        if (st.is_relayed) {
-                            if (trace_path_)
-                                this->writePathInTrace(p, "FREE_DTA");
-                            Packet::free(p);
-                            return;
-                        }
-
-                        if (flh->hop() > st.hop) {
-	                        if (Scheduler::instance().clock() -
-								st.timestamp <= t_dupl_) {
-	                        	st.nd++;
-	                        	double r = uniform(0, 1);
-	                        	if (st.nd > n_dupl_ - r) {
-	                        		if (st.timer != nullptr) {
-	                        			st.timer->force_cancel();
-	                        			Packet::free(st.timer->pkt());
-	                        			delete st.timer;
-	                        			st.timer = nullptr;
-	                        		}
-	                        		if (trace_path_)
-	                        			this->writePathInTrace(p, "CNCL_DUP");
-	                        		Packet::free(p);
-	                        		return;
-	                        	}
-	                        	if (trace_path_)
-	                        		this->writePathInTrace(p, "FREE_DTA");
-	                        	Packet::free(p);
-	                        	return;
-								} else {
-									// T_Dupl window expired,
-									// just drop duplicate but keep timer
-									if (trace_path_)
-										this->writePathInTrace(p, "FREE_DTA");
-									Packet::free(p);
-									return;
-								}
-                        }
-
-
-                        if (flh->hop() < st.hop) {
-							st.hop = flh->hop();
-                            if (trace_path_)
-                                this->writePathInTrace(p, "UPDT_HOP");
-                            Packet::free(p);
-                            return;
-                        }
-
-                        // Same hop count
-                        // Not set by rules
+                    if (st.is_relayed) {
                         if (trace_path_)
                             this->writePathInTrace(p, "FREE_DTA");
                         Packet::free(p);
                         return;
                     }
 
-                    // New source - add to map and schedule forwarding
-                    packet_state new_state;
-                    new_state.hop = flh->hop();
-                    new_state.nd = 0;
-                    new_state.is_relayed = false;
-                    new_state.timestamp = Scheduler::instance().clock();
-                    new_state.timer = new UwdfloodingHandler(this, p->copy());
+                    if (flh->hop() > st.hop) {
+                        if (Scheduler::instance().clock() -
+							st.timestamp <= t_dupl_) {
+	                        st.nd++;
+	                        double r = uniform(0, 1);
+	                        if (st.nd > n_dupl_ - r) {
+	                        	if (st.timer != nullptr) {
+	                        		st.timer->force_cancel();
+	                        		Packet::free(st.timer->pkt());
+	                        		delete st.timer;
+	                        		st.timer = nullptr;
+	                        	}
+	                        	if (trace_path_)
+	                        		this->writePathInTrace(p, "CNCL_DUP");
+	                        	Packet::free(p);
+	                        	return;
+	                        }
+	                        if (trace_path_)
+	                        	this->writePathInTrace(p, "FREE_DTA");
+	                        Packet::free(p);
+	                        return;
+							} else {
+								// T_Dupl window expired,
+								// just drop duplicate but keep timer
+								if (trace_path_)
+									this->writePathInTrace(p, "FREE_DTA");
+								Packet::free(p);
+								return;
+							}
+                    }
 
-                	double delay = uniform(t_min_, t_max_);
-                    new_state.timer->sched(delay);
+                    if (flh->hop() < st.hop) {
+						st.hop = flh->hop();
+                        if (trace_path_)
+                            this->writePathInTrace(p, "UPDT_HOP");
+                        Packet::free(p);
+                        return;
+                    }
 
-                    map_packets_state new_map;
-                    new_map.insert(std::pair<uint16_t, packet_state>(ch->uid(), new_state));
-                    my_all_packets_.insert(std::pair<uint8_t, map_packets_state>(iph->saddr(), new_map));
-
+                    // Same hop count
+                    // Not set by rules
                     if (trace_path_)
-                        this->writePathInTrace(p, "SCHD_DTA");
+                        this->writePathInTrace(p, "FREE_DTA");
                     Packet::free(p);
                     return;
                 }
 
-                // No optimization - forward immediately
-                packets_forwarded_++;
+                // New source - add to map and schedule forwarding
+                packet_state new_state;
+                new_state.hop = flh->hop();
+                new_state.nd = 0;
+                new_state.is_relayed = false;
+                new_state.timestamp = Scheduler::instance().clock();
+                new_state.timer = new UwdfloodingHandler(this, p->copy());
+
+                double delay = uniform(t_min_, t_max_);
+                new_state.timer->sched(delay);
+
+                map_packets_state new_map;
+                new_map.insert(std::pair<uint16_t, packet_state>(ch->uid(), new_state));
+                my_all_packets_.insert(std::pair<uint8_t, map_packets_state>(iph->saddr(), new_map));
+
                 if (trace_path_)
-                    this->writePathInTrace(p, "FRWD_DTA");
-                sendDown(p);
+                    this->writePathInTrace(p, "SCHD_DTA");
+                Packet::free(p);
                 return;
             }
 
@@ -425,114 +395,98 @@ UwDflooding::recv(Packet *p)
                 ch->direction() = hdr_cmn::DOWN;
                 ch->prev_hop_ = ipAddr_;
                 ch->next_hop() = UWIP_BROADCAST;
-                flh->ttl()--;
 
-                if (flh->ttl() <= 0) {
-                    if (trace_path_)
-                        this->writePathInTrace(p, "DROP_TTL");
-                    drop(p, 1, TTL_EQUALS_TO_ZERO);
-                    return;
-                }
+                map_all_packets::iterator it2 =
+                    my_all_packets_.find(iph->saddr());
+                if (it2 != my_all_packets_.end()) {
+                    map_packets_state::iterator it3 =
+                        it2->second.find(ch->uid());
 
-                if (optimize_) {
-                    map_all_packets::iterator it2 =
-                    	my_all_packets_.find(iph->saddr());
-                    if (it2 != my_all_packets_.end()) {
-                        map_packets_state::iterator it3 =
-                        	it2->second.find(ch->uid());
+                    if (it3 == it2->second.end()) {
+                        // Known source and new packet -> add it and forward
+                        packet_state new_state;
+                        new_state.hop = flh->hop();
+                        new_state.nd = 0;
+                        new_state.is_relayed = false;
+                        new_state.timestamp = Scheduler::instance().clock();
+                        new_state.timer = new UwdfloodingHandler(this, p->copy());
 
-                        if (it3 == it2->second.end()) {
-                            // Known source and new packet -> add it and forward
-                        	packet_state new_state;
-                        	new_state.hop = flh->hop();
-                        	new_state.nd = 0;
-                        	new_state.is_relayed = false;
-                        	new_state.timestamp = Scheduler::instance().clock();
-                        	new_state.timer = new UwdfloodingHandler(this, p->copy());
+                        double delay = uniform(t_min_, t_max_);
+                        new_state.timer->sched(delay);
 
-                        	double delay = uniform(t_min_, t_max_);
-                        	new_state.timer->sched(delay);
+                        it2->second.insert(std::pair<uint16_t, packet_state>(ch->uid(), new_state));
 
-                        	it2->second.insert(std::pair<uint16_t, packet_state>(ch->uid(), new_state));
-
-                        	if (trace_path_)
-                        		this->writePathInTrace(p, "SCHD_DTA");
-                        	Packet::free(p);
-                        	return;
-                        }
-                        // Packet already seen - drop
-                    	packet_state &st = it3->second;
-                    	if (flh->hop() > st.hop) {
-                    		if (Scheduler::instance().clock() -
-								st.timestamp <= t_dupl_) {
-                    			st.nd++;
-                    			double r = uniform(0, 1);
-                    			if (st.nd > n_dupl_ - r) {
-                    				if (st.timer != nullptr) {
-                    					st.timer->force_cancel();
-                    					Packet::free(st.timer->pkt());
-                    					delete st.timer;
-                    					st.timer = nullptr;
-                    				}
-                    				if (trace_path_)
-                    					this->writePathInTrace(p, "CNCL_DUP");
-                    				Packet::free(p);
-                    				return;
+                        if (trace_path_)
+                        	this->writePathInTrace(p, "SCHD_DTA");
+                        Packet::free(p);
+                        return;
+                    }
+                    // Packet already seen - drop
+                    packet_state &st = it3->second;
+                    if (flh->hop() > st.hop) {
+                    	if (Scheduler::instance().clock() -
+							st.timestamp <= t_dupl_) {
+                    		st.nd++;
+                    		double r = uniform(0, 1);
+                    		if (st.nd > n_dupl_ - r) {
+                    			if (st.timer != nullptr) {
+                    				st.timer->force_cancel();
+                    				Packet::free(st.timer->pkt());
+                    				delete st.timer;
+                    				st.timer = nullptr;
                     			}
                     			if (trace_path_)
-                    				this->writePathInTrace(p, "FREE_DTA");
+                    				this->writePathInTrace(p, "CNCL_DUP");
                     			Packet::free(p);
                     			return;
-								}
-							// T_Dupl window expired,
-							// just drop duplicate but keep timer
-							if (trace_path_)
-								this->writePathInTrace(p, "FREE_DTA");
-							Packet::free(p);
-							return;
-						}
-
-                    	if (flh->hop() < st.hop) {
-                    		st.hop = flh->hop();
+                    		}
                     		if (trace_path_)
-                    			this->writePathInTrace(p, "UPDT_HOP");
+                    			this->writePathInTrace(p, "FREE_DTA");
                     		Packet::free(p);
                     		return;
-                    	}
+							}
+						// T_Dupl window expired,
+						// just drop duplicate but keep timer
+						if (trace_path_)
+							this->writePathInTrace(p, "FREE_DTA");
+						Packet::free(p);
+						return;
+					}
 
-                    	// Same hop count
-                    	// Not set by rules
+                    if (flh->hop() < st.hop) {
+                    	st.hop = flh->hop();
                     	if (trace_path_)
-                    		this->writePathInTrace(p, "FREE_DTA");
+                    		this->writePathInTrace(p, "UPDT_HOP");
                     	Packet::free(p);
                     	return;
                     }
 
-                    // New source - forward
-                	packet_state new_state;
-                	new_state.hop = flh->hop();
-                	new_state.nd = 0;
-                	new_state.is_relayed = false;
-                	new_state.timestamp = Scheduler::instance().clock();
-                	new_state.timer = new UwdfloodingHandler(this, p->copy());
-
-                	double delay = uniform(t_min_, t_max_);
-                	new_state.timer->sched(delay);
-
-                	map_packets_state new_map;
-                	new_map.insert(std::pair<uint16_t, packet_state>(ch->uid(), new_state));
-                	my_all_packets_.insert(std::pair<uint8_t, map_packets_state>(iph->saddr(), new_map));
-
-                	if (trace_path_)
-                		this->writePathInTrace(p, "SCHD_DTA");
-                	Packet::free(p);
-                	return;
+                    // Same hop count
+                    // Not set by rules
+                    if (trace_path_)
+                    	this->writePathInTrace(p, "FREE_DTA");
+                    Packet::free(p);
+                    return;
                 }
 
+                // New source - forward
+                packet_state new_state;
+                new_state.hop = flh->hop();
+                new_state.nd = 0;
+                new_state.is_relayed = false;
+                new_state.timestamp = Scheduler::instance().clock();
+                new_state.timer = new UwdfloodingHandler(this, p->copy());
+
+                double delay = uniform(t_min_, t_max_);
+                new_state.timer->sched(delay);
+
+                map_packets_state new_map;
+                new_map.insert(std::pair<uint16_t, packet_state>(ch->uid(), new_state));
+                my_all_packets_.insert(std::pair<uint8_t, map_packets_state>(iph->saddr(), new_map));
+
                 if (trace_path_)
-                    this->writePathInTrace(p, "FRWD_DTA");
-                packets_forwarded_++;
-            	sendDown(p);
+                	this->writePathInTrace(p, "SCHD_DTA");
+                Packet::free(p);
                 return;
             }
 
@@ -566,7 +520,6 @@ UwDflooding::recv(Packet *p)
             ch->prev_hop_ = ipAddr_;
             ch->next_hop() = UWIP_BROADCAST;
             ch->size() += sizeof(hdr_uwdflooding);
-            flh->ttl() = getTTL(p);
             flh->hop() = 1;
 
             if (trace_path_)
@@ -588,17 +541,6 @@ UwDflooding::recv(Packet *p)
     Packet::free(p);
 } /* UwDflooding::recv */
 
-uint8_t
-UwDflooding::getTTL(Packet *p) const
-{
-	hdr_uwcbr *uwcbrh = HDR_UWCBR(p);
-	auto it = ttl_traffic_map.find(uwcbrh->traffic_type());
-	if (it != ttl_traffic_map.end()) {
-		return it->second;
-	}
-	return ttl_;
-}
-
 void
 UwDflooding::writePathInTrace(const Packet *p, const string &_info)
 {
@@ -614,8 +556,6 @@ UwDflooding::writePathInTrace(const Packet *p, const string &_info)
 	osstream_ << Scheduler::instance().clock();
 	osstream_ << '\t';
 	osstream_ << static_cast<uint32_t>(ch->uid() & 0x0000ffff);
-	osstream_ << '\t';
-	osstream_ << static_cast<uint32_t>(flh->ttl());
 	osstream_ << '\t';
 	osstream_ << static_cast<uint32_t>(ch->prev_hop_ & 0x000000ff);
 	osstream_ << '\t';

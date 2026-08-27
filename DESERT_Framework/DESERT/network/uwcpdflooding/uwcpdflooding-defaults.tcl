@@ -46,8 +46,6 @@ PacketHeaderManager set tab_(PacketHeader/CPDFLOODING) 1
 PacketHeaderManager set tab_(PacketGeader/CPDFLOODING_NOTIFICATION) 1
 
 Module/UW/CPDFLOODING set debug_                    0
-Module/UW/CPDFLOODING set ttl_                      10
-Module/UW/CPDFLOODING set optimize_                 1
 Module/UW/CPDFLOODING set t_max_                    65
 Module/UW/CPDFLOODING set t_min_                    5
 Module/UW/CPDFLOODING set t_dupl_                   20

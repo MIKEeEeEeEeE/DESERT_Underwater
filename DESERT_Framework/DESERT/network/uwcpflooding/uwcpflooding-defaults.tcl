@@ -42,12 +42,7 @@ load libuwaloha.so
 load libuwcsmaaloha.so
 load libuwal.so
 
-PacketHeaderManager set tab_(PacketHeader/DFLOODING) 1
-PacketHeaderManager set tab_(PacketGeader/DFLOODING_NOTIFICATION) 1
+PacketHeaderManager set tab_(PacketHeader/CPFLOODING) 1
+PacketHeaderManager set tab_(PacketGeader/CPFLOODING_NOTIFICATION) 1
 
-Module/UW/DFLOODING set debug_                    0
-Module/UW/DFLOODING set t_max_                    65
-Module/UW/DFLOODING set t_min_                    5
-Module/UW/DFLOODING set t_dupl_                   20
-Module/UW/DFLOODING set n_dupl_                   2.5
-
+Module/UW/CPFLOODING set debug_                    0

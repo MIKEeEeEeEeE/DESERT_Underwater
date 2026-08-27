@@ -172,9 +172,6 @@ Module/UW/CBR set drop_out_of_order_   0
 
 # UW/CPDFLOODING
 Module/UW/CPDFLOODING set debug_                  0
-Module/UW/CPDFLOODING set ttl_                    20
-Module/UW/CPDFLOODING set optimize_               1
-Module/UW/CPDFLOODING set t_delay_                100
 Module/UW/CPDFLOODING set t_dupl_                 20
 Module/UW/CPDFLOODING set t_max_                  65
 Module/UW/CPDFLOODING set t_min_                  5

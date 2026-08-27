@@ -31,112 +31,100 @@
 #include <algorithm>
 #include <vector>
 
-#include "uwcpdflooding.h"
-#include "uwcpdflooding-hdr.h"
+#include "uwcpflooding-hdr.h"
+#include "uwcpflooding.h"
 
+extern packet_t PT_UWCPFLOODING;
+extern packet_t PT_UWCPFLOODING_NOTIFICATION;
 
-#define uniform(a, b)  ((RNG::defaultrng()->uniform_double() * ((b) - (a)) + (a)))
-
-extern packet_t PT_UWCPDFLOODING;
-extern packet_t PT_UWCPDFLOODING_NOTIFICATION;
-
-int hdr_uwcpdflooding::offset_ = 0; /**< Offset used to access in
-                                     <i>hdr_uwdflooding</i> packets header. */
+int hdr_uwcpflooding::offset_ = 0; /**< Offset used to access in
+										<i>hdr_uwcpflooding</i> packets header. */
 
 /**
- * Adds the module for UwDflooding in ns2.
+ * Adds the module for UwCPFlooding in ns2.
  */
-static class UwCPDfloodingModuleClass : public TclClass
+static class UwCPFloodingModuleClass : public TclClass
 {
 public:
-    UwCPDfloodingModuleClass()
-        : TclClass("Module/UW/CPDFLOODING")
+    UwCPFloodingModuleClass()
+        : TclClass("Module/UW/CPFLOODING")
     {
     }
 
     TclObject*
     create(int, const char *const *)
     {
-        return (new UwCPDflooding());
+        return (new UwCPFlooding());
     }
-} class_mod_uwcpdflooding;
+} class_mod_uwcpflooding;
 
 /**
- * Adds the header for <i>hdr_uwdflooding</i> packets in ns2.
+ * Adds the header for <i>hdr_uwcpflooding</i> packets in ns2.
  */
-static class UwCPDfloodingPktClass : public PacketHeaderClass
+static class UwCPFloodingPktClass : public PacketHeaderClass
 {
 public:
-    UwCPDfloodingPktClass()
-        : PacketHeaderClass("PacketHeader/CPDFLOODING", sizeof(hdr_uwcpdflooding))
+    UwCPFloodingPktClass()
+        : PacketHeaderClass("PacketHeader/CPFLOODING", sizeof(hdr_uwcpflooding))
     {
         this->bind();
-        bind_offset(&hdr_uwcpdflooding::offset_);
+        bind_offset(&hdr_uwcpflooding::offset_);
     }
-} class_uwcpdflooding_pkt;
+} class_uwcpflooding_pkt;
 
-UwcpdfloodingHandler::UwcpdfloodingHandler(UwCPDflooding *m, Packet* p)
+UwCPFloodingHandler::UwCPFloodingHandler(UwCPFlooding *m, Packet* p)
     : TimerHandler()
     , module_(m)
     , pkt_(p)
 {
 }
 
-UwcpdfloodingHandler::~UwcpdfloodingHandler()
+UwCPFloodingHandler::~UwCPFloodingHandler()
 {
 }
 
 void
-UwcpdfloodingHandler::expire(Event *e)
+UwCPFloodingHandler::expire(Event *e)
 {
-    // Обработчик таймера теперь просто передает пакет в doForward
     module_->doForward(pkt_);
 }
 
 Packet*
-UwcpdfloodingHandler::pkt() const
+UwCPFloodingHandler::pkt() const
 {
     return pkt_;
 }
 
-UwCPDflooding::UwCPDflooding()
+UwCPFlooding::UwCPFlooding()
     : ipAddr_(0)
     , packets_forwarded_(0)
     , trace_path_(false)
     , trace_file_path_name_((char *) "trace")
     , te_(0.0)
-    , t_min_(0.0)
-    , t_max_(0.0)
-    , n_dupl_(0)
-    , t_dupl_(0)
 { // Binding to TCL variables.
-    bind("n_dupl_", &n_dupl_);
-    bind("t_dupl_", &t_dupl_);
     bind("debug_", &debug_);
-    bind("t_min_", &t_min_);
-    bind("t_max_", &t_max_);
-} /* UwDflooding::UwDflooding */
+} /* UwCPFlooding::UwCPFlooding */
 
-UwCPDflooding::~UwCPDflooding()
+UwCPFlooding::~UwCPFlooding()
 {
-} /* UwDflooding::~UwDflooding */
+} /* UwCPFlooding::~UwCPFlooding */
 
 int
-UwCPDflooding::recvSyncClMsg(ClMessage *m)
+UwCPFlooding::recvSyncClMsg(ClMessage *m)
 {
     return Module::recvSyncClMsg(m);
-} /* UwDflooding::recvSyncClMsg */
+} /* UwCPFlooding::recvSyncClMsg */
 
 int
-UwCPDflooding::recvAsyncClMsg(ClMessage *m)
+UwCPFlooding::recvAsyncClMsg(ClMessage *m)
 {
     return Module::recvAsyncClMsg(m);
-} /* UwDflooding::recvAsyncClMsg */
+} /* UwCPFlooding::recvAsyncClMsg */
 
 void
-UwCPDflooding::doForward(Packet *p)
+UwCPFlooding::doForward(Packet *p)
 {
-    hdr_uwcpdflooding *fh = HDR_UWCPDFLOODING(p);
+    hdr_uwcpflooding *fh = HDR_UWCPFLOODING(p);
     hdr_uwip *iph = HDR_UWIP(p);
     hdr_cmn *ch = HDR_CMN(p);
 
@@ -146,9 +134,7 @@ UwCPDflooding::doForward(Packet *p)
         map_packets_state::iterator it2 = it->second.find(ch->uid());
         if (it2 != it->second.end()) {
             packet_state &st = it2->second;
-
             auto& local_cp = st.coverage_map;
-
             te_ = 0.0;
             for (const auto& pair : link_quality_neighbors) {
                 uint8_t curr_k = pair.first;
@@ -159,7 +145,6 @@ UwCPDflooding::doForward(Packet *p)
             	if (cprobK < 0.9)
 					te_ += Luk * (1.0 - cprobK);
             }
-
             fh->hop() = st.hop;
             fh->hop()++;
             fh->prev_prev_hop_ = st.prev_prev_hop_;
@@ -177,7 +162,7 @@ UwCPDflooding::doForward(Packet *p)
 }
 
 int
-UwCPDflooding::command(int argc, const char *const *argv)
+UwCPFlooding::command(int argc, const char *const *argv)
 {
     Tcl &tcl = Tcl::instance();
 
@@ -186,7 +171,7 @@ UwCPDflooding::command(int argc, const char *const *argv)
             tcl.resultf("%lu", packets_forwarded_);
             return TCL_OK;
         } else if (strcasecmp(argv[1], "getfloodingheadersize") == 0) {
-            tcl.resultf("%d", sizeof(hdr_uwcpdflooding));
+            tcl.resultf("%d", sizeof(hdr_uwcpflooding));
             return TCL_OK;
         }
     } else if (argc == 3) {
@@ -213,108 +198,36 @@ UwCPDflooding::command(int argc, const char *const *argv)
         }
     }
     return Module::command(argc, argv);
-} /* UwDflooding::command */
+} /* UwCPFlooding::command */
 
 void
-UwCPDflooding::recv(Packet *p)
+UwCPFlooding::recv(Packet *p)
 {
     hdr_cmn *ch = HDR_CMN(p);
     hdr_uwip *iph = HDR_UWIP(p);
-    hdr_uwcpdflooding *flh = HDR_UWCPDFLOODING(p);
+    hdr_uwcpflooding *flh = HDR_UWCPFLOODING(p);
 	hdr_MPhy *ph = HDR_MPHY(p);
 
 
     if (!ch->error()) {
         if (ch->direction() == hdr_cmn::UP) {
 
-        	// 1. Calculate SNR in linear scale
-        	double snr_linear = (ph && ph->Pn > 0.0) ? (ph->Pr / ph->Pn) : 1.0; // 64.5425
-        	// 2. Compute BER
-        	double ber = 0.5 * std::erfc(std::sqrt(snr_linear)); // 3.24861e-30
-        	// 3. Compute Packet Success Rate (Luv) avoiding float precision loss
-        	double num_bits = static_cast<double>(ch->size() * 8); // 1040
-
-        	double link_quality = (num_bits > 0.0) ? std::exp(num_bits * std::log1p(-ber)) : 1.0; // 1
+        	double snr_linear = (ph && ph->Pn > 0.0) ? (ph->Pr / ph->Pn) : 1.0;
+        	double ber = 0.5 * std::erfc(std::sqrt(snr_linear));
+        	double num_bits = static_cast<double>(ch->size() * 8);
+        	double link_quality =
+        		(num_bits > 0.0) ? std::exp(num_bits * std::log1p(-ber)) : 1.0;
 
         	uint8_t u = ipAddr_;
         	uint8_t v = ch->prev_hop_;
         	uint8_t prev_k = flh->prev_prev_hop_;
 
-        	// Обновление графа соседства при получении уведомления
         	link_quality_neighbors[v] = link_quality;
         	auto& Bvu = neighbors[std::make_pair(v, u)];
         	auto& Bkv = neighbors[std::make_pair(prev_k, v)];
         	Bvu.insert(ch->uid());
         	Bkv.insert(ch->uid());
 
-
-            // 1. ПОЛУЧЕНИЕ УВЕДОМЛЕНИЯ / ACK (PT_UWCPDFLOODING_NOTIFICATION)
-            if (ch->ptype() == PT_UWCPDFLOODING_NOTIFICATION) {
-                if (trace_path_)
-                    this->writePathInTrace(p, "RECV_ACK");
-
-                map_all_packets::iterator it2 = my_all_packets_.find(iph->saddr());
-                if (it2 != my_all_packets_.end()) {
-                    map_packets_state::iterator it3 = it2->second.find(ch->uid());
-                    if (it3 != it2->second.end()) {
-
-                        // Обновляем карту покрытия для активного пакета при получении ACK
-                        auto& local_cp = it3->second.coverage_map;
-                        auto& Bvu = neighbors[std::make_pair(v, u)];
-
-                    	te_ = 0.0;
-                        for (const auto& pair : link_quality_neighbors) {
-                        	uint8_t curr_k = pair.first;
-                        	double Luk = pair.second;
-                        	if (curr_k == v) {
-                        		local_cp[curr_k] = 1.0;
-                        		it3->second.coverage_timestamps[curr_k] = Scheduler::instance().clock(); // Обновляем время
-                        		continue;
-                        	}
-
-                        	double current_time = Scheduler::instance().clock();
-
-                        	// --- ПРОВЕРКА ВРЕМЕННОГО ОКНА ---
-                        	auto time_it = it3->second.coverage_timestamps.find(curr_k);
-                        	if (time_it != it3->second.coverage_timestamps.end()) {
-                        		// Если запись вышла за пределы временного окна — обнуляем её
-                        		if (current_time - time_it->second > time_window) {
-                        			local_cp[curr_k] = 0.0;
-                        		}
-                        	}
-
-                            double cprobK = local_cp[curr_k];
-                            if (cprobK < 0.9) {
-                                auto it_bvk = neighbors.find(std::make_pair(v, curr_k));
-                                if (it_bvk != neighbors.end() && !it_bvk->second.empty()) {
-                                    std::vector<uint16_t> common;
-                                    std::set_intersection(
-                                        Bvu.begin(), Bvu.end(),
-                                        it_bvk->second.begin(), it_bvk->second.end(),
-                                        std::back_inserter(common)
-                                    );
-                                    double Pvku = static_cast<double>(common.size()) / static_cast<double>(Bvu.size());
-                                	cprobK = 1.0 - (1.0 - cprobK) * (1.0 - Pvku);
-                                    local_cp[curr_k] = cprobK;
-                                }
-                            }
-                        	if (cprobK < 0.9)
-                        		te_ += Luk * (1.0 - cprobK);
-                        }
-
-                        if (it3->second.timer != nullptr) {
-                            it3->second.timer->force_cancel();
-                            Packet::free(it3->second.timer->pkt());
-                            delete it3->second.timer;
-                            it3->second.timer = nullptr;
-                        }
-                        if (trace_path_)
-                            this->writePathInTrace(p, "CNCL_FRWD");
-                    }
-                }
-                Packet::free(p);
-                return;
-            }
             if (trace_path_)
                 this->writePathInTrace(p, "RECV_DTA");
 
@@ -331,11 +244,11 @@ UwCPDflooding::recv(Packet *p)
                 // Отправляем уведомление
                 Packet *notif = Packet::alloc();
 
-                hdr_uwcpdflooding *flh_ = HDR_UWCPDFLOODING(notif);
+                hdr_uwcpflooding *flh_ = HDR_UWCPFLOODING(notif);
                 flh_->prev_prev_hop_ = ch->prev_hop_;
 
                 hdr_cmn *ch_ = HDR_CMN(notif);
-                ch_->ptype() = PT_UWCPDFLOODING_NOTIFICATION;
+                ch_->ptype() = PT_UWCPFLOODING_NOTIFICATION;
                 ch_->size() = 0;
                 ch_->uid() = ch->uid();
                 ch_->direction() = hdr_cmn::DOWN;
@@ -367,7 +280,7 @@ UwCPDflooding::recv(Packet *p)
 
             // 3. BROADCAST ПАКЕТ
             if (iph->daddr() == UWIP_BROADCAST) {
-                ch->size() -= sizeof(hdr_uwcpdflooding);
+                ch->size() -= sizeof(hdr_uwcpflooding);
                 if (trace_path_)
                     this->writePathInTrace(p, "SDUP_DTA");
                 sendUp(p->copy());
@@ -376,7 +289,7 @@ UwCPDflooding::recv(Packet *p)
                 flh->prev_prev_hop_ = ch->prev_hop_;
                 ch->prev_hop_ = ipAddr_;
                 ch->next_hop() = UWIP_BROADCAST;
-                ch->size() += sizeof(hdr_uwcpdflooding);
+                ch->size() += sizeof(hdr_uwcpflooding);
 
 
                 map_all_packets::iterator it2 =
@@ -390,10 +303,9 @@ UwCPDflooding::recv(Packet *p)
                         // Известный источник, новый пакет
                         packet_state new_state;
                         new_state.hop = flh->hop();
-                        new_state.nd = 0;
                         new_state.is_relayed = false;
                         new_state.timestamp = Scheduler::instance().clock();
-                        new_state.timer = new UwcpdfloodingHandler(this, p->copy());
+                        new_state.timer = new UwCPFloodingHandler(this, p->copy());
                         new_state.prev_prev_hop_ = ch->prev_hop_;
                         // Обновление покрытия и расчёт TE
                         auto& local_cp = new_state.coverage_map;
@@ -442,8 +354,10 @@ UwCPDflooding::recv(Packet *p)
                         	if (cprobK < 0.9)
                         		te_ += Luk * (1.0 - cprobK);
                         }
+                    	std::cout << te_ << std::endl;
 
-                        double delay = uniform(t_min_, t_max_) / (1.0 + te_);
+                    	// double delay = 50;
+                        double delay = 100 / (1.0 + te_);
                         new_state.timer->sched(delay);
 
                         it2->second.insert(std::pair<uint16_t, packet_state>(ch->uid(), new_state));
@@ -512,42 +426,6 @@ UwCPDflooding::recv(Packet *p)
                     		te_ += Luk * (1.0 - cprobK);
                     }
 
-                    if (flh->hop() > st.hop) {
-                        if (Scheduler::instance().clock() - st.timestamp <= t_dupl_) {
-                            st.nd++;
-                            double r = uniform(0, 1);
-                            if (st.nd > n_dupl_ - r) {
-                                if (st.timer != nullptr) {
-                                    st.timer->force_cancel();
-                                    Packet::free(st.timer->pkt());
-                                    delete st.timer;
-                                    st.timer = nullptr;
-                                }
-                                if (trace_path_)
-                                    this->writePathInTrace(p, "CNCL_DUP");
-                                Packet::free(p);
-                                return;
-                            }
-                            if (trace_path_)
-                                this->writePathInTrace(p, "FREE_DTA");
-                            Packet::free(p);
-                            return;
-                        } else {
-                            if (trace_path_)
-                                this->writePathInTrace(p, "FREE_DTA");
-                            Packet::free(p);
-                            return;
-                        }
-                    }
-
-                    if (flh->hop() < st.hop) {
-                        st.hop = flh->hop();
-                        if (trace_path_)
-                            this->writePathInTrace(p, "UPDT_HOP");
-                        Packet::free(p);
-                        return;
-                    }
-
                     if (trace_path_)
                         this->writePathInTrace(p, "FREE_DTA");
                     Packet::free(p);
@@ -557,10 +435,9 @@ UwCPDflooding::recv(Packet *p)
                 // Новый источник (Broadcast)
                 packet_state new_state;
                 new_state.hop = flh->hop();
-                new_state.nd = 0;
                 new_state.is_relayed = false;
                 new_state.timestamp = Scheduler::instance().clock();
-                new_state.timer = new UwcpdfloodingHandler(this, p->copy());
+                new_state.timer = new UwCPFloodingHandler(this, p->copy());
                 new_state.prev_prev_hop_ = ch->prev_hop_;
                 auto& local_cp = new_state.coverage_map;
 
@@ -608,8 +485,10 @@ UwCPDflooding::recv(Packet *p)
                 	if (cprobK < 0.9)
                 		te_ += Luk * (1.0 - cprobK);
                 }
+            	std::cout << "488: " << te_ << std::endl;
 
-                double delay = uniform(t_min_, t_max_) / (1.0 + te_);
+            	// double delay = 50;
+                double delay = 100 / (1.0 + te_);
                 new_state.timer->sched(delay);
 
                 map_packets_state new_map;
@@ -633,178 +512,143 @@ UwCPDflooding::recv(Packet *p)
                 map_all_packets::iterator it2 =
                     my_all_packets_.find(iph->saddr());
                 if (it2 != my_all_packets_.end()) {
-	                map_packets_state::iterator it3 =
-						it2->second.find(ch->uid());
+                    map_packets_state::iterator it3 =
+                        it2->second.find(ch->uid());
 
-                	if (it3 == it2->second.end()) {
-                		// Известный источник, новый Unicast пакет
-                		packet_state new_state;
-                		new_state.hop = flh->hop();
-                		new_state.nd = 0;
-                		new_state.is_relayed = false;
-                		new_state.timestamp = Scheduler::instance().clock();
-                		new_state.timer = new UwcpdfloodingHandler(this, p->copy());
-                		new_state.prev_prev_hop_ = ch->prev_hop_;
-                		auto& local_cp = new_state.coverage_map;
+                    if (it3 == it2->second.end()) {
+                        // Известный источник, новый Unicast пакет
+                        packet_state new_state;
+                        new_state.hop = flh->hop();
+                        new_state.is_relayed = false;
+                        new_state.timestamp = Scheduler::instance().clock();
+                        new_state.timer = new UwCPFloodingHandler(this, p->copy());
+                        new_state.prev_prev_hop_ = ch->prev_hop_;
+                        auto& local_cp = new_state.coverage_map;
 
-                		double current_time = Scheduler::instance().clock();
+                        double current_time = Scheduler::instance().clock();
 
-                		te_ = 0.0;
-                		for (const auto& pair : link_quality_neighbors) {
-                			uint8_t curr_k = pair.first;
-                			double Luk = pair.second;
+                        te_ = 0.0;
+                        for (const auto& pair : link_quality_neighbors) {
+                        	uint8_t curr_k = pair.first;
+                        	double Luk = pair.second;
 
-                			if (curr_k == v) {
-                				local_cp[curr_k] = 1.0;
-                				new_state.coverage_timestamps[curr_k] = current_time; // Обновляем время
-                				continue;
-                			}
+                        	if (curr_k == v) {
+                        		local_cp[curr_k] = 1.0;
+                        		new_state.coverage_timestamps[curr_k] = current_time; // Обновляем время
+                        		continue;
+                        	}
 
-                			// --- ПРОВЕРКА ВРЕМЕННОГО ОКНА ---
-                			auto time_it = new_state.coverage_timestamps.find(curr_k);
-                			if (time_it != new_state.coverage_timestamps.end()) {
-                				// Если запись вышла за пределы временного окна — обнуляем её
-                				if (current_time - time_it->second > time_window) {
-                					local_cp[curr_k] = 0.0;
-                				}
-                			}
+                        	// --- ПРОВЕРКА ВРЕМЕННОГО ОКНА ---
+                        	auto time_it = new_state.coverage_timestamps.find(curr_k);
+                        	if (time_it != new_state.coverage_timestamps.end()) {
+                        		// Если запись вышла за пределы временного окна — обнуляем её
+                        		if (current_time - time_it->second > time_window) {
+                        			local_cp[curr_k] = 0.0;
+                        		}
+                        	}
 
-                			double cprobK = local_cp[curr_k];
+                        	double cprobK = local_cp[curr_k];
 
-                			if (cprobK < 0.9) {
-                				auto it_bvk = neighbors.find(std::make_pair(v, curr_k));
-                				if (it_bvk != neighbors.end() && !it_bvk->second.empty() && !Bvu.empty()) {
-                					std::vector<uint16_t> common;
-                					std::set_intersection(
+                        	if (cprobK < 0.9) {
+                        		auto it_bvk = neighbors.find(std::make_pair(v, curr_k));
+                        		if (it_bvk != neighbors.end() && !it_bvk->second.empty() && !Bvu.empty()) {
+                        			std::vector<uint16_t> common;
+                        			std::set_intersection(
 										Bvu.begin(), Bvu.end(),
 										it_bvk->second.begin(), it_bvk->second.end(),
 										std::back_inserter(common)
 									);
-                					double Pvku = static_cast<double>(common.size()) / static_cast<double>(Bvu.size());
+                        			double Pvku = static_cast<double>(common.size()) / static_cast<double>(Bvu.size());
 
-                					cprobK = 1.0 - (1.0 - cprobK) * (1.0 - Pvku);
-                					local_cp[curr_k] = cprobK;
-                					new_state.coverage_timestamps[curr_k] = current_time; // Фиксируем время обновления
-                				}
-                			}
+                        			cprobK = 1.0 - (1.0 - cprobK) * (1.0 - Pvku);
+                        			local_cp[curr_k] = cprobK;
+                        			new_state.coverage_timestamps[curr_k] = current_time; // Фиксируем время обновления
+                        		}
+                        	}
 
-                			if (cprobK < 0.9)
-                				te_ += Luk * (1.0 - cprobK);
-                		}
+                        	if (cprobK < 0.9)
+                        		te_ += Luk * (1.0 - cprobK);
+                        }
+                    	std::cout << "571: " << te_ << std::endl;
 
-                		double delay = uniform(t_min_, t_max_) / (1.0 + te_);
-                		new_state.timer->sched(delay);
+                    	// double delay = 50;             // 39.02...
+                        double delay = 100 / (1.0 + te_); // 38.037180106228874
+                        new_state.timer->sched(delay);
 
-                		it2->second.insert(std::pair<uint16_t, packet_state>(ch->uid(), new_state));
+                        it2->second.insert(std::pair<uint16_t, packet_state>(ch->uid(), new_state));
 
-                		if (trace_path_)
-                			this->writePathInTrace(p, "SCHD_DTA");
-                		Packet::free(p);
-                		return;
-                	}
+                        if (trace_path_)
+                            this->writePathInTrace(p, "SCHD_DTA");
+                        Packet::free(p);
+                        return;
+                    }
 
-                	// Уверенно известный Unicast пакет
-                	packet_state &st = it3->second;
+                    // Уверенно известный Unicast пакет
+                    packet_state &st = it3->second;
                 	if (st.is_relayed) {              // ← ЕСТЬ в broadcast
                 		Packet::free(p);
                 		return;
                 	}
 
-                	auto& local_cp = st.coverage_map;
+                    auto& local_cp = st.coverage_map;
 
-                	double current_time = Scheduler::instance().clock();
+                    double current_time = Scheduler::instance().clock();
 
-                	te_ = 0.0;
-                	for (const auto& pair : link_quality_neighbors) {
-                		uint8_t curr_k = pair.first;
-                		double Luk = pair.second;
+                    te_ = 0.0;
+                    for (const auto& pair : link_quality_neighbors) {
+                    	uint8_t curr_k = pair.first;
+                    	double Luk = pair.second;
 
-                		if (curr_k == v) {
-                			local_cp[curr_k] = 1.0;
-                			st.coverage_timestamps[curr_k] = current_time; // Обновляем время
-                			continue;
-                		}
+                    	if (curr_k == v) {
+                    		local_cp[curr_k] = 1.0;
+                    		st.coverage_timestamps[curr_k] = current_time; // Обновляем время
+                    		continue;
+                    	}
 
-                		// --- ПРОВЕРКА ВРЕМЕННОГО ОКНА ---
-                		auto time_it = st.coverage_timestamps.find(curr_k);
-                		if (time_it != st.coverage_timestamps.end()) {
-                			// Если запись вышла за пределы временного окна — обнуляем её
-                			if (current_time - time_it->second > time_window) {
-                				local_cp[curr_k] = 0.0;
-                			}
-                		}
+                    	// --- ПРОВЕРКА ВРЕМЕННОГО ОКНА ---
+                    	auto time_it = st.coverage_timestamps.find(curr_k);
+                    	if (time_it != st.coverage_timestamps.end()) {
+                    		// Если запись вышла за пределы временного окна — обнуляем её
+                    		if (current_time - time_it->second > time_window) {
+                    			local_cp[curr_k] = 0.0;
+                    		}
+                    	}
 
-                		double cprobK = local_cp[curr_k];
+                    	double cprobK = local_cp[curr_k];
 
-                		if (cprobK < 0.9) {
-                			auto it_bvk = neighbors.find(std::make_pair(v, curr_k));
-                			if (it_bvk != neighbors.end() && !it_bvk->second.empty() && !Bvu.empty()) {
-                				std::vector<uint16_t> common;
-                				std::set_intersection(
+                    	if (cprobK < 0.9) {
+                    		auto it_bvk = neighbors.find(std::make_pair(v, curr_k));
+                    		if (it_bvk != neighbors.end() && !it_bvk->second.empty() && !Bvu.empty()) {
+                    			std::vector<uint16_t> common;
+                    			std::set_intersection(
 									Bvu.begin(), Bvu.end(),
 									it_bvk->second.begin(), it_bvk->second.end(),
 									std::back_inserter(common)
 								);
-                				double Pvku = static_cast<double>(common.size()) / static_cast<double>(Bvu.size());
+                    			double Pvku = static_cast<double>(common.size()) / static_cast<double>(Bvu.size());
 
-                				cprobK = 1.0 - (1.0 - cprobK) * (1.0 - Pvku);
-                				local_cp[curr_k] = cprobK;
-                				st.coverage_timestamps[curr_k] = current_time; // Фиксируем время обновления
-                			}
-                		}
+                    			cprobK = 1.0 - (1.0 - cprobK) * (1.0 - Pvku);
+                    			local_cp[curr_k] = cprobK;
+                    			st.coverage_timestamps[curr_k] = current_time; // Фиксируем время обновления
+                    		}
+                    	}
 
-                		if (cprobK < 0.9)
-                			te_ += Luk * (1.0 - cprobK);
-                	}
+                    	if (cprobK < 0.9)
+                    		te_ += Luk * (1.0 - cprobK);
+                    }
 
-                	if (flh->hop() > st.hop) {
-                		if (Scheduler::instance().clock() - st.timestamp <= t_dupl_) {
-                			st.nd++;
-                			double r = uniform(0, 1);
-                			if (st.nd > n_dupl_ - r) {
-                				if (st.timer != nullptr) {
-                					st.timer->force_cancel();
-                					Packet::free(st.timer->pkt());
-                					delete st.timer;
-                					st.timer = nullptr;
-                				}
-                				if (trace_path_)
-                					this->writePathInTrace(p, "CNCL_DUP");
-                				Packet::free(p);
-                				return;
-                			}
-                			if (trace_path_)
-                				this->writePathInTrace(p, "FREE_DTA");
-                			Packet::free(p);
-                			return;
-                		}
-                		if (trace_path_)
-                			this->writePathInTrace(p, "FREE_DTA");
-                		Packet::free(p);
-                		return;
-                	}
-
-                	if (flh->hop() < st.hop) {
-                		st.hop = flh->hop();
-                		if (trace_path_)
-                			this->writePathInTrace(p, "UPDT_HOP");
-                		Packet::free(p);
-                		return;
-                	}
-
-                	if (trace_path_)
-                		this->writePathInTrace(p, "FREE_DTA");
-                	Packet::free(p);
-                	return;
+                    if (trace_path_)
+                        this->writePathInTrace(p, "FREE_DTA");
+                    Packet::free(p);
+                    return;
                 }
 
                 // Новый источник (Unicast)
                 packet_state new_state;
                 new_state.hop = flh->hop();
-                new_state.nd = 0;
                 new_state.is_relayed = false;
                 new_state.timestamp = Scheduler::instance().clock();
-                new_state.timer = new UwcpdfloodingHandler(this, p->copy());
+                new_state.timer = new UwCPFloodingHandler(this, p->copy());
                 new_state.prev_prev_hop_ = ch->prev_hop_;
                 auto& local_cp = new_state.coverage_map;
 
@@ -852,8 +696,10 @@ UwCPDflooding::recv(Packet *p)
                 	if (cprobK < 0.9)
                 		te_ += Luk * (1.0 - cprobK);
                 }
+            	std::cout << "693: " << te_ << std::endl;
 
-                double delay = uniform(t_min_, t_max_) / (1.0 + te_);
+                double delay = 100 / (1.0 + te_);
+            	// double delay = 50;
                 new_state.timer->sched(delay);
 
                 map_packets_state new_map;
@@ -897,7 +743,7 @@ UwCPDflooding::recv(Packet *p)
             flh->prev_prev_hop_ = ch->prev_hop_;
             ch->prev_hop_ = ipAddr_;
             ch->next_hop() = UWIP_BROADCAST;
-            ch->size() += sizeof(hdr_uwcpdflooding);
+            ch->size() += sizeof(hdr_uwcpflooding);
             flh->hop() = 1;
 
             if (trace_path_)
@@ -916,14 +762,13 @@ UwCPDflooding::recv(Packet *p)
     if (trace_path_)
         this->writePathInTrace(p, "FREE_DTA");
     Packet::free(p);
-} /* UwDflooding::recv */
+} /* UwCPFlooding::recv */
 
 void
-UwCPDflooding::writePathInTrace(const Packet *p, const string &_info)
+UwCPFlooding::writePathInTrace(const Packet *p, const string &_info)
 {
     hdr_uwip *iph = HDR_UWIP(p);
     hdr_cmn *ch = HDR_CMN(p);
-    hdr_uwcpdflooding *flh = HDR_UWCPDFLOODING(p);
 
     trace_file_path_.open(trace_file_path_name_, fstream::app);
     osstream_.clear();
@@ -950,7 +795,7 @@ UwCPDflooding::writePathInTrace(const Packet *p, const string &_info)
 }
 
 string
-UwCPDflooding::printIP(const nsaddr_t &ip_)
+UwCPFlooding::printIP(const nsaddr_t &ip_)
 {
     stringstream out;
     out << ((ip_ & 0xff000000) >> 24);
@@ -961,4 +806,4 @@ UwCPDflooding::printIP(const nsaddr_t &ip_)
     out << ".";
     out << ((ip_ & 0x000000ff));
     return out.str();
-} /* UwDflooding::printIP */
+} /* UwCPFlooding::printIP */

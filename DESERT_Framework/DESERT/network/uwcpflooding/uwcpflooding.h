@@ -2,11 +2,11 @@
 // Created by mike on 8/3/26.
 //
 
-#ifndef UWDFLOODING_H
-#define UWDFLOODING_H
+#ifndef UWCPFLOODING_H
+#define UWCPFLOODING_H
 
 
-#include "uwdflooding-hdr.h"
+#include "uwcpflooding-hdr.h"
 
 #include <timer-handler.h>
 #include <uwcbr-module.h>
@@ -29,26 +29,28 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <algorithm>
+#include <set>
 
-class UwdfloodingHandler;
+class UwCPFloodingHandler;
 /**
- * UwFlooding class is used to represent the routing layer of a node.
+ * UwCPFlooding class is used to represent the routing layer of a node.
  */
-class UwDflooding : public Module
+class UwCPFlooding : public Module
 {
 
 public:
-	friend class UwdfloodingHandler;
+	friend class UwCPFloodingHandler;
 
     /**
-     * Constructor of UwFlooding class.
+     * Constructor of UwCPFlooding class.
      */
-    UwDflooding();
+    UwCPFlooding();
 
     /**
-     * Destructor of UwFlooding class.
+     * Destructor of UwCPFlooding class.
      */
-    virtual ~UwDflooding();
+    virtual ~UwCPFlooding();
 
 protected:
     /*****************************
@@ -119,11 +121,12 @@ protected:
     static std::string printIP(const nsaddr_t &);
 
     /**
-     * Forward a packet after timer expiration.
+     * Get the value of the TTL for a packet.
      *
-     * @param p Packet to forward.
+     * @param p pointer to the packet for which the ttl has to be computed.
+     * @return the ttl for that packet
      */
-    void doForward(Packet *p);
+    uint8_t getTTL(Packet *p) const;
 
 private:
     // Variables
@@ -138,55 +141,67 @@ private:
     std::ofstream trace_file_path_; /**< Ofstream used to write the path trace file
                                   in the disk. */
     std::ostringstream osstream_; /**< Used to convert to string. */
-	
-    double t_max_; /**< Maximum random delay for optimized forwarding. */
-    double t_min_; /**< Minimum random delay for optimized forwarding. */
-    double n_dupl_; /**< Number of duplicates threshold. */
-	double t_dupl_; /**< Time window for duplicates */
 
-    typedef struct {
-        uint8_t hop;
-        double nd;
-    	double timestamp;
-        bool is_relayed;
-        UwdfloodingHandler* timer;
-    } packet_state;
+	double te_;  /**< Transmission Efficiency */
+	double time_window = 5000; /**< Time window */
+	static size_t neighbor_count; /**< Number of neighbors */
 
-    typedef std::map<uint16_t, packet_state> map_packets_state;
-    typedef std::map<uint8_t, map_packets_state>
-        map_all_packets; /**< Typedef for a map of the packet
-                              (saddr, map_packets_state). */
+	typedef struct {
+		uint8_t hop;
+		double nd;
+		double timestamp;
+		uint8_t prev_prev_hop_;
+		bool is_relayed;
+		UwCPFloodingHandler* timer;
+		std::map<uint8_t, double> coverage_map;
+		std::map<uint8_t, double> coverage_timestamps;
+	} packet_state;
 
-    map_all_packets my_all_packets_; /**< Map of all packets (forwarded + pending). */
+	typedef std::map<uint16_t, packet_state> map_packets_state;
+	typedef std::map<uint8_t, map_packets_state>
+		map_all_packets; /**< Typedef for a map of the packet
+							  (saddr, map_packets_state). */
 
+	map_all_packets my_all_packets_; /**< Map of all packets (forwarded + pending). */
+
+	std::set<uint8_t> U_u;                       // Множество непокрытых соседей U(u)
+	std::map<uint8_t, double> link_quality_neighbors; // L(u,k)
+	std::map<std::pair<uint8_t, uint8_t>, std::set<uint16_t>> neighbors; // Bvu, Bvk
 
     /**
      * Copy constructor declared as private. It is not possible to create a new
-     * UwDflooding object passing to its constructor another UwDflooding object.
+     * UwCPFlooding object passing to its constructor another UwCPFlooding object.
      *
-     * @param UwDflooding& UwDflooding object.
+     * @param UwCPFlooding& UwCPFlooding object.
      */
-    UwDflooding(const UwDflooding &);
+    UwCPFlooding(const UwCPFlooding &);
 
     /**
      * Assignment operator declared as private.
      */
-    UwDflooding &operator=(const UwDflooding &);
+    UwCPFlooding &operator=(const UwCPFlooding &);
+
+	/**
+	 * Forward a packet after timer expiration.
+	 *
+	 * @param p Packet to forward.
+	 */
+	void doForward(Packet *p);
 };
 
-class UwdfloodingHandler : public TimerHandler
+class UwCPFloodingHandler : public TimerHandler
 {
 public:
-    UwdfloodingHandler(UwDflooding* m, Packet *p);
-    virtual ~UwdfloodingHandler();
+    UwCPFloodingHandler(UwCPFlooding* m, Packet *p);
+    virtual ~UwCPFloodingHandler();
 	Packet* pkt() const;
 
 protected:
     void expire(Event *e);
 
 private:
-    UwDflooding *module_;
+    UwCPFlooding *module_;
     Packet *pkt_;
 };
 
-#endif // UWDFLOODING_H
+#endif // UWCPFLOODING_H

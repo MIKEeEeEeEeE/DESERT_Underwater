@@ -19,19 +19,9 @@ extern packet_t PT_UWCPDFLOODING_NOTIFICATION;
  */
 typedef struct hdr_uwcpdflooding {
 
-	uint8_t ttl_; /**< Time to live of the packet. */
 	uint8_t hop_; /**< Count-up of hops. */
 	uint8_t prev_prev_hop_;
 	static int offset_; /**< Required by the PacketHeaderManager. */
-
-	/**
-	 * Reference to the ttl_ variable.
-	 */
-	inline uint8_t &
-	ttl()
-	{
-		return ttl_;
-	}
 
 	/**
 	 * Reference to the hop_ variable.

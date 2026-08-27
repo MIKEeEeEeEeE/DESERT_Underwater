@@ -5,9 +5,6 @@
 #ifndef UWCPDFLOODING_H
 #define UWCPDFLOODING_H
 
-#define TTL_EQUALS_TO_ZERO \
-    "TEZ" /**< Reason for a drop in a <i>UWDFLOODING</i> module. */
-
 #include "uwcpdflooding-hdr.h"
 
 #include <timer-handler.h>
@@ -122,21 +119,10 @@ protected:
      */
     static std::string printIP(const nsaddr_t &);
 
-    /**
-     * Get the value of the TTL for a packet.
-     *
-     * @param p pointer to the packet for which the ttl has to be computed.
-     * @return the ttl for that packet
-     */
-    uint8_t getTTL(Packet *p) const;
-
 private:
     // Variables
 
     uint8_t ipAddr_;
-    int ttl_; /**< Time to live of the <i>UWDFLOODING</i> packets. */
-    int optimize_; /**< Flag used to enable the mechanism to drop packets
-                      processed twice. */
     long packets_forwarded_; /**< Number of packets forwarded by this module. */
     bool trace_path_; /**< Flag used to enable or disable the path trace file
                          for nodes. */
@@ -152,7 +138,7 @@ private:
 	double te_;  /**< Transmission Efficiency */
 	double t_min_;
 	double t_max_;
-	double time_window = 100;
+	double time_window = 5000;
 
 	typedef struct {
 		uint8_t hop;
@@ -171,9 +157,6 @@ private:
 							  (saddr, map_packets_state). */
 
 	map_all_packets my_all_packets_; /**< Map of all packets (forwarded + pending). */
-
-    std::map<uint16_t, uint8_t>
-            ttl_traffic_map; /**< Map with ttl per traffic. */
 
 	std::set<uint8_t> U_u;                       // Множество непокрытых соседей U(u)
 	std::map<uint8_t, double> coverage_prob;     // CPu(k)

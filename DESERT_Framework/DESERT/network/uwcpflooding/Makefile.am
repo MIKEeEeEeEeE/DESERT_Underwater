@@ -29,33 +29,33 @@
 
 AM_CXXFLAGS = -Wall -ggdb3
 
-lib_LTLIBRARIES = libuwdflooding.la
+lib_LTLIBRARIES = libuwcpflooding.la
 check_PROGRAMS =
 
 SUBDIRS =
 
 TESTS =
 
-libuwdflooding_la_SOURCES = initlib.cpp\
-    uwdflooding-defaults.tcl\
-    uwdflooding.cpp
+libuwcpflooding_la_SOURCES = initlib.cpp\
+    uwcpflooding-defaults.tcl\
+    uwcpflooding.cpp
 
-libuwdflooding_la_CPPFLAGS = @NS_CPPFLAGS@ @NSMIRACLE_CPPFLAGS@ @DESERT_CPPFLAGS@
-libuwdflooding_la_LDFLAGS =  @NS_LDFLAGS@ @NSMIRACLE_LDFLAGS@ @DESERT_LDFLAGS@
-libuwdflooding_la_LIBADD = @NS_LIBADD@ @NSMIRACLE_LIBADD@ @DESERT_LIBADD@ \
+libuwcpflooding_la_CPPFLAGS = @NS_CPPFLAGS@ @NSMIRACLE_CPPFLAGS@ @DESERT_CPPFLAGS@
+libuwcpflooding_la_LDFLAGS =  @NS_LDFLAGS@ @NSMIRACLE_LDFLAGS@ @DESERT_LDFLAGS@
+libuwcpflooding_la_LIBADD = @NS_LIBADD@ @NSMIRACLE_LIBADD@ @DESERT_LIBADD@ \
 						  @DESERT_UWCBR_LIBADD@ @DESERT_UWIP_LIBADD@
 
-nodist_libuwdflooding_la_SOURCES = InitTcl.cc
+nodist_libuwcpflooding_la_SOURCES = InitTcl.cc
 
 
 BUILT_SOURCES = InitTcl.cc
 
 CLEANFILES = InitTcl.cc
 
-TCL_FILES = uwdflooding-defaults.tcl
+TCL_FILES = uwcpflooding-defaults.tcl
 
 InitTcl.cc: Makefile $(TCL_FILES)
-		cat $(VPATH)/$(TCL_FILES) | @TCL2CPP@ MUwDfloodingInitTclCode > InitTcl.cc
+		cat $(VPATH)/$(TCL_FILES) | @TCL2CPP@ MUwCPFloodingInitTclCode > InitTcl.cc
 
 
 EXTRA_DIST = $(TCL_FILES)

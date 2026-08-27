@@ -10,20 +10,20 @@
 # 2. Redistributions in binary form must reproduce the above copyright
 #    notice, this list of conditions and the following disclaimer in the
 #    documentation and/or other materials provided with the distribution.
-# 3. Neither the name of the University of Padova (SIGNET lab) nor the 
-#    names of its contributors may be used to endorse or promote products 
+# 3. Neither the name of the University of Padova (SIGNET lab) nor the
+#    names of its contributors may be used to endorse or promote products
 #    derived from this software without specific prior written permission.
 #
-# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 
-# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED 
-# TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
-# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR 
-# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, 
-# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, 
-# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; 
-# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, 
-# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR 
-# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+# TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+# OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+# WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+# OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
 # ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 # Author: Giovanni Toso <tosogiov@dei.unipd.it>
@@ -32,7 +32,7 @@
 #
 # ----------------------------------------------------------------------------------
 # This script depicts a very simple but complete stack in which two nodes send data
-# to a common sink. The routes are dinamic and decided by UW/FLOODING protocol.
+# to a common sink. The routes are dinamic and decided by UW/CPFLOODING protocol.
 # The application used to generate data is UW/CBR.
 # ----------------------------------------------------------------------------------
 # Stack
@@ -42,7 +42,7 @@
 #   +--------------------------+   +--------------------------+   +-------------+------------+
 #   |  6. UW/UDP               |   |  6. UW/UDP               |   |  6. UW/UDP               |
 #   +--------------------------+   +--------------------------+   +--------------------------+
-#   |  5. UW/FLOODING          |   |  5. UW/FLOODING          |   |  5. UW/FLOODING          |
+#   |  5. UW/CPFLOODING        |   |  5. UW/CPFLOODING        |   |  5. UW/CPFLOODING        |
 #   +--------------------------+   +--------------------------+   +--------------------------+
 #   |  4. UW/IP                |   |  4. UW/IP                |   |  4. UW/IP                |
 #   +--------------------------+   +--------------------------+   +--------------------------+
@@ -52,7 +52,7 @@
 #   +--------------------------+   +--------------------------+   +--------------------------+
 #   |  1. WOSS/BPSK/Underwater |   |  1. WOSS/BPSK/Underwater |   |  1. WOSS/BPSK/Underwater |
 #   +--------------------------+   +--------------------------+   +--------------------------+
-#            |         |                    |         |                   |         |       
+#            |         |                    |         |                   |         |
 #   +----------------------------------------------------------------------------------------+
 #   |                                     UnderwaterChannel                                  |
 #   +----------------------------------------------------------------------------------------+
@@ -80,7 +80,7 @@ load libuwip.so
 load libuwmll.so
 load libuwudp.so
 load libuwcbr.so
-load libuwflooding.so
+load libuwcpflooding.so
 
 #############################
 # NS-Miracle initialization #
@@ -140,9 +140,9 @@ set rnd_gen [new RandomVariable/Uniform]
 $rnd_gen use-rng $rng
 
 if {$opt(trace_files)} {
-    set opt(tracefilename) "./test_uwflooding.tr"
+    set opt(tracefilename) "./test_uwcpflooding.tr"
     set opt(tracefile) [open $opt(tracefilename) w]
-    set opt(cltracefilename) "./test_uwflooding.cltr"
+    set opt(cltracefilename) "./test_uwcpflooding.cltr"
     set opt(cltracefile) [open $opt(tracefilename) w]
 } else {
     set opt(tracefilename) "/dev/null"
@@ -166,19 +166,17 @@ Module/UW/CBR set period_              $opt(cbr_period)
 Module/UW/CBR set PoissonTraffic_      1
 Module/UW/CBR set drop_out_of_order_   0
 
-# UW/FLOODING
-Module/UW/FLOODING set ttl_                       6
-Module/UW/FLOODING set maximum_cache_time_time_  60
-Module/UW/FLOODING set optimize_                  1
+# UW/CPFLOODING
+Module/UW/CPFLOODING set debug_                  0
 
 # CSMA
 Module/UW/CSMA_ALOHA set buffer_pkts_    [expr $opt(memory_slots)/$opt(pktsize)];
 Module/UW/CSMA_ALOHA set max_tx_tries_   3
 
-# BPSK              
+# BPSK
 Module/UW/PHYSICAL set debug_                     0
 Module/UW/PHYSICAL set BitRate_                   $opt(bitrate)
-Module/UW/PHYSICAL set AcquisitionThreshold_dB_   4.0 
+Module/UW/PHYSICAL set AcquisitionThreshold_dB_   4.0
 Module/UW/PHYSICAL set RxSnrPenalty_dB_           $opt(rx_snr_penalty_db)
 Module/UW/PHYSICAL set TxSPLMargin_dB_            $opt(tx_margin_db)
 Module/UW/PHYSICAL set MaxTxSPL_dB_               $opt(txpower)
@@ -197,21 +195,21 @@ proc createNode { id } {
     global channel propagation data_mask ns cbr position node udp portnum ipr ipif channel_estimator
     global phy posdb opt rvposx rvposy rvposz mhrouting mll mac woss_utilities woss_creator db_manager
     global node_coordinates
-    
-    set node($id) [$ns create-M_Node $opt(tracefile) $opt(cltracefile)] 
 
-    set cbr($id)  [new Module/UW/CBR] 
+    set node($id) [$ns create-M_Node $opt(tracefile) $opt(cltracefile)]
+
+    set cbr($id)  [new Module/UW/CBR]
     set udp($id)  [new Module/UW/UDP]
-    set ipr($id)  [new Module/UW/FLOODING]
+    set ipr($id)  [new Module/UW/CPFLOODING]
     set ipif($id) [new Module/UW/IP]
-    set mll($id)  [new Module/UW/MLL] 
-    set mac($id)  [new Module/UW/CSMA_ALOHA] 
+    set mll($id)  [new Module/UW/MLL]
+    set mac($id)  [new Module/UW/CSMA_ALOHA]
     set phy($id)  [new Module/UW/PHYSICAL]
 
     $node($id) addModule 7 $cbr($id)   0  "CBR"
     $node($id) addModule 6 $udp($id)   0  "UDP"
     $node($id) addModule 5 $ipr($id)   0  "IPR"
-    $node($id) addModule 4 $ipif($id)  0  "IPF"   
+    $node($id) addModule 4 $ipif($id)  0  "IPF"
     $node($id) addModule 3 $mll($id)   0  "MLL"
     $node($id) addModule 2 $mac($id)   0  "MAC"
     $node($id) addModule 1 $phy($id)   0  "PHY"
@@ -232,19 +230,19 @@ proc createNode { id } {
     set tmp_ [expr ($id) + 1]
     $ipif($id) addr $tmp_
     $ipr($id)  addr $tmp_
-    
+
     set position($id) [new "Position/BM"]
     $node($id) addPosition $position($id)
     set posdb($id) [new "PlugIn/PositionDB"]
     $node($id) addPlugin $posdb($id) 20 "PDB"
     $posdb($id) addpos [$mac($id) addr] $position($id)
-    
+
     set interf_data($id) [new "Module/UW/INTERFERENCE"]
     $interf_data($id) set maxinterval_ $opt(maxinterval_)
     $interf_data($id) set debug_       0
 
     $phy($id) setPropagation $propagation
-    
+
     $phy($id) setSpectralMask $data_mask
     $phy($id) setInterference $interf_data($id)
     $mac($id) $opt(ack_mode)
@@ -259,12 +257,12 @@ proc createSink { } {
     set node_sink [$ns create-M_Node $opt(tracefile) $opt(cltracefile)]
 
     for {set cnt 0} {$cnt < $opt(nn)} {incr cnt} {
-        set cbr_sink($cnt)  [new Module/UW/CBR] 
+        set cbr_sink($cnt)  [new Module/UW/CBR]
     }
     set udp_sink       [new Module/UW/UDP]
-    set ipr_sink       [new Module/UW/FLOODING]
+    set ipr_sink       [new Module/UW/CPFLOODING]
     set ipif_sink      [new Module/UW/IP]
-    set mll_sink       [new Module/UW/MLL] 
+    set mll_sink       [new Module/UW/MLL]
     set mac_sink       [new Module/UW/CSMA_ALOHA]
     set phy_data_sink  [new Module/UW/PHYSICAL]
 
@@ -273,17 +271,17 @@ proc createSink { } {
     }
     $node_sink addModule 6 $udp_sink       0 "UDP"
     $node_sink addModule 5 $ipr_sink       0 "IPR"
-    $node_sink addModule 4 $ipif_sink      0 "IPF"   
+    $node_sink addModule 4 $ipif_sink      0 "IPF"
     $node_sink addModule 3 $mll_sink       0 "MLL"
     $node_sink addModule 2 $mac_sink       0 "MAC"
     $node_sink addModule 1 $phy_data_sink  0 "PHY"
 
     for { set cnt 0} {$cnt < $opt(nn)} {incr cnt} {
-        $node_sink setConnection $cbr_sink($cnt)  $udp_sink      0   
+        $node_sink setConnection $cbr_sink($cnt)  $udp_sink      0
     }
     $node_sink setConnection $udp_sink  $ipr_sink            0
     $node_sink setConnection $ipr_sink  $ipif_sink           0
-    $node_sink setConnection $ipif_sink $mll_sink            0 
+    $node_sink setConnection $ipif_sink $mll_sink            0
     $node_sink setConnection $mll_sink  $mac_sink            0
     $node_sink setConnection $mac_sink  $phy_data_sink       0
     $node_sink addToChannel  $channel   $phy_data_sink       0
@@ -293,9 +291,9 @@ proc createSink { } {
         if {$cnt > 252} {
             puts "hostnum > 252!!! exiting"
             exit
-        }    
+        }
     }
-    
+
     $ipif_sink addr 254
     $ipr_sink addr 254
 
@@ -347,7 +345,7 @@ for {set id1 0} {$id1 < $opt(nn)} {incr id1} {
 for {set id1 0} {$id1 < $opt(nn)} {incr id1} {
     for {set id2 0} {$id2 < $opt(nn)} {incr id2}  {
       $mll($id1) addentry [$ipif($id2) addr] [$mac($id2) addr]
-    }   
+    }
     $mll($id1) addentry [$ipif_sink addr] [ $mac_sink addr]
     $mll_sink addentry [$ipif($id1) addr] [ $mac($id1) addr]
 }
@@ -367,7 +365,7 @@ $position_sink setZ_ -100
 # Start/Stop Timers #
 #####################
 # Set here the timers to start and/or stop modules (optional)
-# e.g., 
+# e.g.,
 for {set id1 0} {$id1 < $opt(nn)} {incr id1}  {
     $ns at $opt(starttime)    "$cbr($id1) start"
     $ns at $opt(stoptime)     "$cbr($id1) stop"
@@ -414,7 +412,7 @@ proc finish {} {
     set ipr_retx               0
     set first_check_ftt        1
     set first_check_ftt_std    1
-    
+
     puts "Node Stats"
     for {set i 0} {$i < $opt(nn)} {incr i}  {
 	set cbr_throughput      [$cbr_sink($i) getthr]
@@ -440,26 +438,26 @@ proc finish {} {
         } else {
             set sum_ftt "$sum_ftt    $cbr_ftt"
         }
-        
+
         if ($first_check_ftt_std) {
             set sum_ftt_std "$cbr_fttstd"
             set first_check_ftt_std 0
         } else {
             set sum_ftt_std "$sum_ftt_std    $cbr_fttstd"
         }
-        
+
         set sum_cbr_throughput [expr $sum_cbr_throughput + $cbr_throughput]
         set sum_cbr_sent_pkts  [expr $sum_cbr_sent_pkts + $cbr_sent_pkts]
         set sum_cbr_rcv_pkts   [expr $sum_cbr_rcv_pkts + $cbr_rcv_pkts]
         set sum_ipr_retx       [expr $sum_ipr_retx + $ipr_retx]
     }
-    
+
     puts "Metrics"
     puts "Mean Throughput          : [expr (double($sum_cbr_throughput)/($opt(nn)))]"
     puts "Sent Packets             : $sum_cbr_sent_pkts"
     puts "Received Packets         : $sum_cbr_rcv_pkts"
     puts "Packet Error Rate        : [expr (1 - 1.0 * $sum_cbr_rcv_pkts / $sum_cbr_sent_pkts) * 100]"
-    
+
     $ns flush-trace
     close $opt(tracefile)
 }
@@ -467,5 +465,5 @@ proc finish {} {
 ###################
 # start simulation
 ###################
-$ns at [expr $opt(stoptime) + 250.0]  "finish; $ns halt" 
+$ns at [expr $opt(stoptime) + 250.0]  "finish; $ns halt"
 $ns run
