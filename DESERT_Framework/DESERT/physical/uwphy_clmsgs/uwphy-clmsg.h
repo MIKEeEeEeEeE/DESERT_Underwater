@@ -54,6 +54,53 @@ extern ClMessage_t CLMSG_UWPHY_B_RATE;
 extern ClMessage_t CLMSG_UWPHY_THRESH;
 extern ClMessage_t CLMSG_UWPHY_LOSTPKT;
 extern ClMessage_t CLMSG_UWPHY_TX_BUSY;
+//sinr clmsg
+extern ClMessage_t CLMSG_UWPHY_NEW;
+
+class ClMsgNew : public ClMessage
+{
+public:
+	/**
+	 * Broadcast constructor of the ClMsgNew class
+	 **/
+	ClMsgNew();
+
+	/**
+	 * Unicast constructor of the ClMsgNew class
+	 * @param int stack_id: id of the stack
+	 * @param dest_mod_id: id of the destination module
+	 **/
+	ClMsgNew(int dest_module_id);
+
+	/**
+	 * Destructor of the ClMsgNew class
+	 **/
+	virtual ~ClMsgNew() = default;
+
+	/**
+	 * Copy method of the ClMsgNew class, the specialization of the return
+	 *value is intentional and it is allowed by c++ standard
+	 *
+	 * @return pointer to a copy of the current ClMsgNew object
+	 **/
+	virtual ClMsgNew *copy();
+
+	/**
+	 * method to set the request type
+	 * @param ReqType type: request type
+	 */
+	void setSinr(double sinr);
+
+	/**
+	 * method to return the request type
+	 * @return req_type
+	 */
+	double getSinr();
+
+protected:
+	double sinr_; /*< request type: either get, set, request or reply */
+};
+// sinr clmsg
 
 /**
  * ClMsgUwPhy should be extended and used to ask to set or get a parameter of a

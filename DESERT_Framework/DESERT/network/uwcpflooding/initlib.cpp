@@ -28,20 +28,15 @@
 //
 
 #include "uwcpflooding-hdr.h"
-
 #include <tclcl.h>
-#include <uwphy-clmsg.h>
 
 extern EmbeddedTcl MUwCPFloodingInitTclCode;
-
-ClMessage_t CLMSG_UWPHY_NEW;
 
 packet_t PT_UWCPFLOODING;
 extern "C" int
 Uwcpflooding_Init()
 {
 	PT_UWCPFLOODING = p_info::addPacket("CPFLOODING");
-	CLMSG_UWPHY_NEW = ClMessage::addClMessage();
 	MUwCPFloodingInitTclCode.load();
 	return 0;
 }

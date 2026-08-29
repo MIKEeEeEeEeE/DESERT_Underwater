@@ -30,17 +30,5 @@
 # @author Giovanni Toso
 # @version 1.0.0
 
-load libmphy.so
-load libuwip.so
-load libuwmll.so
-load libuwstaticrouting.so
-load libuwudp.so
-load libuwcbr.so
-load libuwapplication.so
-load libpackeruwapplication.so
-load libuwaloha.so
-load libuwcsmaaloha.so
-load libuwal.so
-
 PacketHeaderManager set tab_(PacketHeader/CPFLOODING) 1
 PacketHeaderManager set tab_(PacketGeader/CPFLOODING_NOTIFICATION) 1

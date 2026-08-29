@@ -37,6 +37,38 @@
 
 #include "uwphy-clmsg.h"
 
+// sinr clmsg
+ClMsgNew::ClMsgNew()
+	: ClMessage(CLMSG_UWPHY_VERBOSITY, CLMSG_UWPHY_NEW)
+	, sinr_()
+{
+}
+
+ClMsgNew::ClMsgNew(int dest_module_id)
+	: ClMessage(CLMSG_UWPHY_VERBOSITY, CLMSG_UWPHY_NEW, UNICAST, dest_module_id)
+	, sinr_()
+{
+}
+
+ClMsgNew *
+ClMsgNew::copy()
+{
+	return new ClMsgNew(*this);
+}
+
+void
+ClMsgNew::setSinr(double sinr)
+{
+	sinr_ = sinr;
+}
+
+double
+ClMsgNew::getSinr()
+{
+	return sinr_;
+}
+// sinr clmsg
+
 ClMsgUwPhy::ClMsgUwPhy(ClMessage_t type)
 	: ClMessage(CLMSG_UWPHY_VERBOSITY, type)
 	, stack_id(CLMSG_UWPHY_STACK_ID_NOT_VALID)

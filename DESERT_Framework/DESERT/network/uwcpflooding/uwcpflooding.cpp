@@ -30,14 +30,10 @@
 #include <set>
 #include <algorithm>
 #include <vector>
-
+// include uwphy clmsg
+#include "uwphy-clmsg.h"
 #include "uwcpflooding-hdr.h"
 #include "uwcpflooding.h"
-#include <uwphysical.h>
-#include <clmsg-stats.h>
-#include <clmsg-discovery.h>
-#include <clmsg-stats.h>
-#include <uwstats-utilities.h>
 
 extern packet_t PT_UWCPFLOODING;
 extern packet_t PT_UWCPFLOODING_NOTIFICATION;
@@ -114,55 +110,24 @@ UwCPFlooding::~UwCPFlooding()
 int
 UwCPFlooding::recvSyncClMsg(ClMessage *m)
 {
-	if (m->type() == CLMSG_TRIGGER_STATS) {
-		std::cout << NOW << " CLMSG_TRIGGER_STATS ClMessage" << std::endl;
-
-		ClMsgStats stats_clmsg = ClMsgStats();
-		sendSyncClMsg(&stats_clmsg);
-
-		std::cout << stats_clmsg.getStats()->type_id << std:: endl; // -1
-		std::cout << (int) StatsEnum::STATS_PHY_LAYER << std:: endl; // 0
-
-		if (stats_clmsg.getStats()->type_id ==
-				(int) StatsEnum::STATS_PHY_LAYER) {
-
-			std::cout << " if (stats_clmsg.getStats()->type_id == (int) StatsEnum::STATS_PHY_LAYER) " << std::endl;
-
-			const UwPhysicalStats *stats =
-					dynamic_cast<const UwPhysicalStats *>(
-							stats_clmsg.getStats());
-			if (stats != 0) {
-
-				std::cout << " if (stats != 0) " << std::endl;
-
-				double rx_power = stats->last_rx_power;
-				double noise    = stats->last_noise_power;
-				double interf   = stats->last_interf_power;
-				double sinr     = stats->last_sinr;
-				double ber      = stats->last_ber;
-				double per      = stats->last_per;
-				bool   is_err   = stats->has_error;
-
-				std::cout << NOW << " [UWCPFLOODING::STATS]"
-					<< " RxPower: " << rx_power
-					<< " | Noise: " << noise
-					<< " | Interf: " << interf
-					<< " | SINR: " << sinr
-					<< " | BER: " << ber
-					<< " | PER: " << per
-					<< " | IsErr: " << is_err
-					<< std::endl;
-			}
-		}
-		return 0;
-	}
-
 	return Module::recvSyncClMsg(m);
 } /* UwCPFlooding::recvSyncClMsg */
 
+// Retrieve sinr phy async clmsg
 int
 UwCPFlooding::recvAsyncClMsg(ClMessage *m)
 {
+
+	if (m->type() == CLMSG_UWPHY_NEW) {
+		auto msg = dynamic_cast<ClMsgNew*>(m);
+		if(msg) {
+			auto sinr= msg->getSinr();
+			printOnLog(Logger::LogLevel::INFO, "UWCPFLOODING",
+				"recvAysyncClMsg(ClMessage *)::sinr = " + 
+						to_string(sinr) + "linear.");
+		}
+	}
+
     return Module::recvAsyncClMsg(m);
 } /* UwCPFlooding::recvAsyncClMsg */
 

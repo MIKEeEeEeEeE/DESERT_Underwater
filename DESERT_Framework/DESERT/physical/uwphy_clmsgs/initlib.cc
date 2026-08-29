@@ -45,6 +45,9 @@ ClMessage_t CLMSG_S2C_TX_MODE;
 ClMessage_t CLMSG_S2C_POWER_LEVEL;
 ClMessage_t CLMSG_S2C_RX_FAILED;
 ClMessage_t CLMSG_UWPHY_TX_BUSY;
+/* Exercise solution */
+ClMessage_t CLMSG_UWPHY_NEW;
+/* Exercise solution */
 
 extern EmbeddedTcl UwPhyClMsgsInitTclCode;
 
@@ -59,6 +62,9 @@ Uwphy_clmsgs_Init()
 	CLMSG_S2C_TX_MODE = ClMessage::addClMessage();
 	CLMSG_S2C_POWER_LEVEL = ClMessage::addClMessage();
 	CLMSG_S2C_RX_FAILED = ClMessage::addClMessage();
+	/* Exercise solution */
+	CLMSG_UWPHY_NEW = ClMessage::addClMessage();
+	/* Exercise solution */
 	UwPhyClMsgsInitTclCode.load();
 	return 0;
 }
