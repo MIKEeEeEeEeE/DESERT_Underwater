@@ -161,19 +161,13 @@ proc createNode { id } {
     $node($id) addModule 1 $phy($id)   0 "PHY"
 
     # Configure logging
-    $udp($id)  enableLog
-    $ipr($id)  enableLog
-    $ipif($id) enableLog
-    $mll($id)  enableLog
-    $mac($id)  enableLog
+    $ipr($id)  setLogLevel 3; # Set log level once
     $phy($id)  enableLog
+    #$udp($id)  enableLog
+    #$ipif($id) enableLog
+    #$mll($id)  enableLog
+    #$mac($id)  enableLog
 
-    $udp($id)  setLogLevel 3
-    $ipr($id)  setLogLevel 3
-    $ipif($id) setLogLevel 3
-    $mll($id)  setLogLevel 3
-    $mac($id)  setLogLevel 3
-    $phy($id)  setLogLevel 3
 
 
     # Connect L7 -> L6

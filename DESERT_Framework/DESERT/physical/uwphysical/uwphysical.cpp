@@ -470,6 +470,15 @@ UnderwaterPhysical::endRx(Packet *p)
 				error_n = error_ni;
 				error_ni = 0; // error transfered on noise
 			}
+
+			// Send sinr inside async clmsg
+			printOnLog(Logger::LogLevel::INFO, "UWPHY",
+					"endRx(Packet *)::sinr = " + to_string(sinr) + " (linear).");
+
+			ClMsgNew *ms = new ClMsgNew();
+			ms->setSinr(sinr);
+			sendAsyncClMsg(ms);
+
 			// update stats and trigger the modules that collect the stats
 			auto uwphystats = dynamic_cast<UwPhysicalStats *>(stats_ptr);
 			if (uwphystats) {
