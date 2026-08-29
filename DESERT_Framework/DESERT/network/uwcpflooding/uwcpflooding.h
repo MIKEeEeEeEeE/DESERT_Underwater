@@ -31,6 +31,11 @@
 #include <vector>
 #include <algorithm>
 #include <set>
+#include <uwphysical.h>
+#include <clmsg-stats.h>
+#include <clmsg-discovery.h>
+#include <clmsg-stats.h>
+#include <uwstats-utilities.h>
 
 class UwCPFloodingHandler;
 /**
@@ -104,14 +109,6 @@ protected:
     static nsaddr_t str2addr(const char *);
 
     /**
-     * Writes in the Path Trace file the path contained in the Packet
-     *
-     * @param Packet to analyze.
-     * @param action String describing the action performed.
-     */
-    virtual void writePathInTrace(const Packet *, const std::string &);
-
-    /**
      * Return a string with an IP in the classic form "x.x.x.x" converting an
      * ns2 nsaddr_t address.
      *
@@ -130,24 +127,27 @@ protected:
 
 private:
     // Variables
+	double rx_power; // Мощность полезного сигнала
+	double noise;    // Шум
+	double interf;   // Помехи/Интерференция
+	double sinr;     // SINR
+	double ber;      // BER
+	double per;      // PER
+	bool   is_err;   // Была ли ошибка приема
 
     uint8_t ipAddr_;
     long packets_forwarded_; /**< Number of packets forwarded by this module. */
-    bool trace_path_; /**< Flag used to enable or disable the path trace file
-                         for nodes. */
-    char *trace_file_path_name_; /**< Name of the trace file that contains
-                                    the list of paths of the data packets
-                                    received. */
-    std::ofstream trace_file_path_; /**< Ofstream used to write the path trace file
-                                  in the disk. */
     std::ostringstream osstream_; /**< Used to convert to string. */
 
 	double te_;  /**< Transmission Efficiency */
 	double time_window = 5000; /**< Time window */
-	static size_t neighbor_count; /**< Number of neighbors */
+
+	/**
+	* Stats pointer, dynamically allocated by method setStats
+	**/
+	Stats* stats_ptr;
 
 	typedef struct {
-		uint8_t hop;
 		double nd;
 		double timestamp;
 		uint8_t prev_prev_hop_;

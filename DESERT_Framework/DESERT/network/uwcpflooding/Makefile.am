@@ -43,7 +43,9 @@ libuwcpflooding_la_SOURCES = initlib.cpp\
 libuwcpflooding_la_CPPFLAGS = @NS_CPPFLAGS@ @NSMIRACLE_CPPFLAGS@ @DESERT_CPPFLAGS@
 libuwcpflooding_la_LDFLAGS =  @NS_LDFLAGS@ @NSMIRACLE_LDFLAGS@ @DESERT_LDFLAGS@
 libuwcpflooding_la_LIBADD = @NS_LIBADD@ @NSMIRACLE_LIBADD@ @DESERT_LIBADD@ \
-						  @DESERT_UWCBR_LIBADD@ @DESERT_UWIP_LIBADD@
+                          @DESERT_UWSTATS_UTILITIES_LIBADD@ @DESERT_UWCBR_LIBADD@ \
+                          @DESERT_UWIP_LIBADD@ @DESERT_UWPHY_CLMSGS_LIBADD@ \
+                          @DESERT_UWPHYSICAL_LIBADD@
 
 nodist_libuwcpflooding_la_SOURCES = InitTcl.cc
 

@@ -44,5 +44,3 @@ load libuwal.so
 
 PacketHeaderManager set tab_(PacketHeader/CPFLOODING) 1
 PacketHeaderManager set tab_(PacketGeader/CPFLOODING_NOTIFICATION) 1
-
-Module/UW/CPFLOODING set debug_                    0

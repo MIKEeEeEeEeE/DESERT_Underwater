@@ -18,19 +18,9 @@ extern packet_t PT_UWCPFLOODING_NOTIFICATION;
  * <i>hdr_uwcpflooding</i> describes packets used by <i>UWCPFLOODING</i>.
  */
 typedef struct hdr_uwcpflooding {
-
-	uint8_t hop_; /**< Count-up of hops. */
+	
 	uint8_t prev_prev_hop_;
 	static int offset_; /**< Required by the PacketHeaderManager. */
-
-	/**
-	 * Reference to the hop_ variable.
-	 */
-	inline uint8_t &
-	hop()
-	{
-		return hop_;
-	}
 
 	/**
 	 * Reference to the offset_ variable.

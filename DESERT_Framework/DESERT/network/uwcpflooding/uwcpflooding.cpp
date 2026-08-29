@@ -33,6 +33,11 @@
 
 #include "uwcpflooding-hdr.h"
 #include "uwcpflooding.h"
+#include <uwphysical.h>
+#include <clmsg-stats.h>
+#include <clmsg-discovery.h>
+#include <clmsg-stats.h>
+#include <uwstats-utilities.h>
 
 extern packet_t PT_UWCPFLOODING;
 extern packet_t PT_UWCPFLOODING_NOTIFICATION;
@@ -98,11 +103,8 @@ UwCPFloodingHandler::pkt() const
 UwCPFlooding::UwCPFlooding()
     : ipAddr_(0)
     , packets_forwarded_(0)
-    , trace_path_(false)
-    , trace_file_path_name_((char *) "trace")
     , te_(0.0)
 { // Binding to TCL variables.
-    bind("debug_", &debug_);
 } /* UwCPFlooding::UwCPFlooding */
 
 UwCPFlooding::~UwCPFlooding()
@@ -112,7 +114,51 @@ UwCPFlooding::~UwCPFlooding()
 int
 UwCPFlooding::recvSyncClMsg(ClMessage *m)
 {
-    return Module::recvSyncClMsg(m);
+	if (m->type() == CLMSG_TRIGGER_STATS) {
+		std::cout << NOW << " CLMSG_TRIGGER_STATS ClMessage" << std::endl;
+
+		int stats_phy_id = 0;
+		ClMsgStats stats_clmsg = ClMsgStats(stats_phy_id, UNICAST);
+		sendSyncClMsg(&stats_clmsg);
+
+		std::cout << stats_clmsg.getStats()->type_id << std:: endl; // -1
+		std::cout << (int) StatsEnum::STATS_PHY_LAYER << std:: endl;
+
+		if (stats_clmsg.getStats()->type_id ==
+				(int) StatsEnum::STATS_PHY_LAYER) {
+
+			std::cout << " if (stats_clmsg.getStats()->type_id == (int) StatsEnum::STATS_PHY_LAYER) " << std::endl;
+
+			const UwPhysicalStats *stats =
+					dynamic_cast<const UwPhysicalStats *>(
+							stats_clmsg.getStats());
+			if (stats != 0) {
+
+				std::cout << " if (stats != 0) " << std::endl;
+
+				double rx_power = stats->last_rx_power;
+				double noise    = stats->last_noise_power;
+				double interf   = stats->last_interf_power;
+				double sinr     = stats->last_sinr;
+				double ber      = stats->last_ber;
+				double per      = stats->last_per;
+				bool   is_err   = stats->has_error;
+
+				std::cout << NOW << " [UWCPFLOODING::STATS]"
+					<< " RxPower: " << rx_power
+					<< " | Noise: " << noise
+					<< " | Interf: " << interf
+					<< " | SINR: " << sinr
+					<< " | BER: " << ber
+					<< " | PER: " << per
+					<< " | IsErr: " << is_err
+					<< std::endl;
+			}
+		}
+		return 0;
+	}
+
+	return Module::recvSyncClMsg(m);
 } /* UwCPFlooding::recvSyncClMsg */
 
 int
@@ -128,7 +174,7 @@ UwCPFlooding::doForward(Packet *p)
     hdr_uwip *iph = HDR_UWIP(p);
     hdr_cmn *ch = HDR_CMN(p);
 
-    // ОБНОВЛЕНИЕ COVERAGE PROBABILITY НЕПОСРЕДСТВЕННО ПЕРЕД ОТПРАВКОЙ
+	// UPDATE COVERAGE PROBABILITY
     map_all_packets::iterator it = my_all_packets_.find(iph->saddr());
     if (it != my_all_packets_.end()) {
         map_packets_state::iterator it2 = it->second.find(ch->uid());
@@ -145,20 +191,18 @@ UwCPFlooding::doForward(Packet *p)
             	if (cprobK < 0.9)
 					te_ += Luk * (1.0 - cprobK);
             }
-            fh->hop() = st.hop;
-            fh->hop()++;
             fh->prev_prev_hop_ = st.prev_prev_hop_;
             st.is_relayed = true;
             st.timer = nullptr;
-        	// st.coverage_map.clear();
         }
     }
 
     sendDown(p);
     packets_forwarded_++;
 
-    if (trace_path_)
-        this->writePathInTrace(p, "FRWD_DTA");
+	printOnLog(Logger::LogLevel::DEBUG,
+			"UWCPFLOODING",
+			"doForward()::Packet relayed " + std::to_string(ch->uid()) + ")");
 }
 
 int
@@ -181,19 +225,6 @@ UwCPFlooding::command(int argc, const char *const *argv)
                 fprintf(stderr, "0 is not a valid IP address");
                 return TCL_ERROR;
             }
-            return TCL_OK;
-        } else if (strcasecmp(argv[1], "trace") == 0) {
-            string tmp_ = ((char *) argv[2]);
-            trace_file_path_name_ = new char[tmp_.length() + 1];
-            strcpy(trace_file_path_name_, tmp_.c_str());
-            if (trace_file_path_name_ == NULL) {
-                fprintf(stderr, "Empty string for the trace file name");
-                return TCL_ERROR;
-            }
-            trace_path_ = true;
-            remove(trace_file_path_name_);
-            trace_file_path_.open(trace_file_path_name_);
-            trace_file_path_.close();
             return TCL_OK;
         }
     }
@@ -218,6 +249,15 @@ UwCPFlooding::recv(Packet *p)
         	double link_quality =
         		(num_bits > 0.0) ? std::exp(num_bits * std::log1p(-ber)) : 1.0;
 
+        	std::cout << "[LINK] "
+			  << "Pr=" << (ph ? ph->Pr : 0.0)
+			  << ", Pn=" << (ph ? ph->Pn : 0.0)
+			  << ", SNR=" << snr_linear
+			  << ", BER=" << ber
+			  << ", bits=" << num_bits
+			  << ", quality=" << link_quality
+			  << std::endl;
+
         	uint8_t u = ipAddr_;
         	uint8_t v = ch->prev_hop_;
         	uint8_t prev_k = flh->prev_prev_hop_;
@@ -228,13 +268,13 @@ UwCPFlooding::recv(Packet *p)
         	Bvu.insert(ch->uid());
         	Bkv.insert(ch->uid());
 
-            if (trace_path_)
-                this->writePathInTrace(p, "RECV_DTA");
+            // if (trace_path_)
+            //     this->writePathInTrace(p, "RECV_DTA");
 
             if (iph->daddr() == 0) {
                 std::cerr << "Destination address not set." << std::endl;
-                if (trace_path_)
-                    this->writePathInTrace(p, "FREE_DTA");
+                // if (trace_path_)
+                //     this->writePathInTrace(p, "FREE_DTA");
                 Packet::free(p);
                 return;
             }
@@ -259,21 +299,21 @@ UwCPFlooding::recv(Packet *p)
                 iph_->saddr() = iph->saddr();
                 iph_->daddr() = UWIP_BROADCAST;
 
-                if (trace_path_)
-                    this->writePathInTrace(notif, "FRWD_NTFC");
+                // if (trace_path_)
+                //     this->writePathInTrace(notif, "FRWD_NTFC");
 
                 sendDown(notif);
-
-                if (trace_path_)
-                    this->writePathInTrace(p, "SDUP_DTA");
+                //
+                // if (trace_path_)
+                //     this->writePathInTrace(p, "SDUP_DTA");
                 sendUp(p);
                 return;
             }
 
             // Пакет от самого себя (loopback) - сбрасываем
             if (iph->saddr() == ipAddr_) {
-                if (trace_path_)
-                    this->writePathInTrace(p, "FREE_DTA");
+                // if (trace_path_)
+                //     this->writePathInTrace(p, "FREE_DTA");
                 Packet::free(p);
                 return;
             }
@@ -281,8 +321,8 @@ UwCPFlooding::recv(Packet *p)
             // 3. BROADCAST ПАКЕТ
             if (iph->daddr() == UWIP_BROADCAST) {
                 ch->size() -= sizeof(hdr_uwcpflooding);
-                if (trace_path_)
-                    this->writePathInTrace(p, "SDUP_DTA");
+                // if (trace_path_)
+                //     this->writePathInTrace(p, "SDUP_DTA");
                 sendUp(p->copy());
 
                 ch->direction() = hdr_cmn::DOWN;
@@ -302,7 +342,6 @@ UwCPFlooding::recv(Packet *p)
                     if (it3 == it2->second.end()) {
                         // Известный источник, новый пакет
                         packet_state new_state;
-                        new_state.hop = flh->hop();
                         new_state.is_relayed = false;
                         new_state.timestamp = Scheduler::instance().clock();
                         new_state.timer = new UwCPFloodingHandler(this, p->copy());
@@ -362,8 +401,8 @@ UwCPFlooding::recv(Packet *p)
 
                         it2->second.insert(std::pair<uint16_t, packet_state>(ch->uid(), new_state));
 
-                        if (trace_path_)
-                            this->writePathInTrace(p, "SCHD_DTA");
+                        // if (trace_path_)
+                        //     this->writePathInTrace(p, "SCHD_DTA");
                         Packet::free(p);
                         return;
                     }
@@ -372,8 +411,8 @@ UwCPFlooding::recv(Packet *p)
                     packet_state &st = it3->second;
 
                     if (st.is_relayed) {
-                        if (trace_path_)
-                            this->writePathInTrace(p, "FREE_DTA");
+                        // if (trace_path_)
+                        //     this->writePathInTrace(p, "FREE_DTA");
                         Packet::free(p);
                         return;
                     }
@@ -426,15 +465,14 @@ UwCPFlooding::recv(Packet *p)
                     		te_ += Luk * (1.0 - cprobK);
                     }
 
-                    if (trace_path_)
-                        this->writePathInTrace(p, "FREE_DTA");
+                    // if (trace_path_)
+                    //     this->writePathInTrace(p, "FREE_DTA");
                     Packet::free(p);
                     return;
                 }
 
                 // Новый источник (Broadcast)
                 packet_state new_state;
-                new_state.hop = flh->hop();
                 new_state.is_relayed = false;
                 new_state.timestamp = Scheduler::instance().clock();
                 new_state.timer = new UwCPFloodingHandler(this, p->copy());
@@ -495,8 +533,8 @@ UwCPFlooding::recv(Packet *p)
                 new_map.insert(std::pair<uint16_t, packet_state>(ch->uid(), new_state));
                 my_all_packets_.insert(std::pair<uint8_t, map_packets_state>(iph->saddr(), new_map));
 
-                if (trace_path_)
-                    this->writePathInTrace(p, "SCHD_DTA");
+                // if (trace_path_)
+                //     this->writePathInTrace(p, "SCHD_DTA");
                 Packet::free(p);
                 return;
             }
@@ -518,7 +556,6 @@ UwCPFlooding::recv(Packet *p)
                     if (it3 == it2->second.end()) {
                         // Известный источник, новый Unicast пакет
                         packet_state new_state;
-                        new_state.hop = flh->hop();
                         new_state.is_relayed = false;
                         new_state.timestamp = Scheduler::instance().clock();
                         new_state.timer = new UwCPFloodingHandler(this, p->copy());
@@ -577,8 +614,8 @@ UwCPFlooding::recv(Packet *p)
 
                         it2->second.insert(std::pair<uint16_t, packet_state>(ch->uid(), new_state));
 
-                        if (trace_path_)
-                            this->writePathInTrace(p, "SCHD_DTA");
+                        // if (trace_path_)
+                        //     this->writePathInTrace(p, "SCHD_DTA");
                         Packet::free(p);
                         return;
                     }
@@ -637,15 +674,14 @@ UwCPFlooding::recv(Packet *p)
                     		te_ += Luk * (1.0 - cprobK);
                     }
 
-                    if (trace_path_)
-                        this->writePathInTrace(p, "FREE_DTA");
+                    // if (trace_path_)
+                    //     this->writePathInTrace(p, "FREE_DTA");
                     Packet::free(p);
                     return;
                 }
 
                 // Новый источник (Unicast)
                 packet_state new_state;
-                new_state.hop = flh->hop();
                 new_state.is_relayed = false;
                 new_state.timestamp = Scheduler::instance().clock();
                 new_state.timer = new UwCPFloodingHandler(this, p->copy());
@@ -706,35 +742,35 @@ UwCPFlooding::recv(Packet *p)
                 new_map.insert(std::pair<uint16_t, packet_state>(ch->uid(), new_state));
                 my_all_packets_.insert(std::pair<uint8_t, map_packets_state>(iph->saddr(), new_map));
 
-                if (trace_path_)
-                    this->writePathInTrace(p, "SCHD_DTA");
+                // if (trace_path_)
+                //     this->writePathInTrace(p, "SCHD_DTA");
                 Packet::free(p);
                 return;
             }
 
             std::cerr << "State machine ERROR." << std::endl;
-            if (trace_path_)
-                this->writePathInTrace(p, "FREE_DTA");
+            // if (trace_path_)
+            //     this->writePathInTrace(p, "FREE_DTA");
             Packet::free(p);
             return;
         }
 
         // 5. НАПРАВЛЕНИЕ ВНИЗ (ОТПРАВКА С ВЕРХНЕГО УРОВНЯ / DOWN)
         if (ch->direction() == hdr_cmn::DOWN) {
-            if (trace_path_)
-                this->writePathInTrace(p, "RECV_DTA");
+            // if (trace_path_)
+            //     this->writePathInTrace(p, "RECV_DTA");
 
             if (iph->daddr() == 0) {
                 std::cerr << "Destination address equals to 0." << std::endl;
-                if (trace_path_)
-                    this->writePathInTrace(p, "FREE_DTA");
+                // if (trace_path_)
+                //     this->writePathInTrace(p, "FREE_DTA");
                 Packet::free(p);
                 return;
             }
 
             if (iph->daddr() == ipAddr_) {
-                if (trace_path_)
-                    this->writePathInTrace(p, "SDUP_DTA");
+                // if (trace_path_)
+                //     this->writePathInTrace(p, "SDUP_DTA");
                 sendUp(p);
                 return;
             }
@@ -744,55 +780,24 @@ UwCPFlooding::recv(Packet *p)
             ch->prev_hop_ = ipAddr_;
             ch->next_hop() = UWIP_BROADCAST;
             ch->size() += sizeof(hdr_uwcpflooding);
-            flh->hop() = 1;
 
-            if (trace_path_)
-                this->writePathInTrace(p, "FRWD_DTA");
+            // if (trace_path_)
+            //     this->writePathInTrace(p, "FRWD_DTA");
             sendDown(p);
             return;
         }
 
         std::cerr << "Direction different from UP or DOWN." << std::endl;
-        if (trace_path_)
-            this->writePathInTrace(p, "FREE_DTA");
+        // if (trace_path_)
+        //     this->writePathInTrace(p, "FREE_DTA");
         Packet::free(p);
         return;
     }
 
-    if (trace_path_)
-        this->writePathInTrace(p, "FREE_DTA");
+    // if (trace_path_)
+    //     this->writePathInTrace(p, "FREE_DTA");
     Packet::free(p);
 } /* UwCPFlooding::recv */
-
-void
-UwCPFlooding::writePathInTrace(const Packet *p, const string &_info)
-{
-    hdr_uwip *iph = HDR_UWIP(p);
-    hdr_cmn *ch = HDR_CMN(p);
-
-    trace_file_path_.open(trace_file_path_name_, fstream::app);
-    osstream_.clear();
-    osstream_.str("");
-    osstream_ << _info;
-    osstream_ << '\t';
-    osstream_ << Scheduler::instance().clock();
-    osstream_ << '\t';
-    osstream_ << static_cast<uint32_t>(ch->uid() & 0x0000ffff);
-    osstream_ << '\t';
-    osstream_ << static_cast<uint32_t>(ch->prev_hop_ & 0x000000ff);
-    osstream_ << '\t';
-    osstream_ << static_cast<uint32_t>(ch->next_hop() & 0x000000ff);
-    osstream_ << '\t';
-    osstream_ << static_cast<uint32_t>(iph->saddr());
-    osstream_ << '\t';
-    osstream_ << static_cast<uint32_t>(iph->daddr());
-    osstream_ << '\t';
-    osstream_ << ch->direction();
-    osstream_ << '\t';
-    osstream_ << ch->ptype();
-    trace_file_path_ << osstream_.str() << endl;
-    trace_file_path_.close();
-}
 
 string
 UwCPFlooding::printIP(const nsaddr_t &ip_)
