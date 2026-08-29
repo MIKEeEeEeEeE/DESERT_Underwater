@@ -102,14 +102,6 @@ protected:
     static nsaddr_t str2addr(const char *);
 
     /**
-     * Writes in the Path Trace file the path contained in the Packet
-     *
-     * @param Packet to analyze.
-     * @param action String describing the action performed.
-     */
-    virtual void writePathInTrace(const Packet *, const std::string &);
-
-    /**
      * Return a string with an IP in the classic form "x.x.x.x" converting an
      * ns2 nsaddr_t address.
      *
@@ -130,13 +122,7 @@ private:
 
     uint8_t ipAddr_;
     long packets_forwarded_; /**< Number of packets forwarded by this module. */
-    bool trace_path_; /**< Flag used to enable or disable the path trace file
-                         for nodes. */
-    char *trace_file_path_name_; /**< Name of the trace file that contains
-                                    the list of paths of the data packets
-                                    received. */
-    std::ofstream trace_file_path_; /**< Ofstream used to write the path trace file
-                                  in the disk. */
+
     std::ostringstream osstream_; /**< Used to convert to string. */
 	
     double t_max_; /**< Maximum random delay for optimized forwarding. */
@@ -180,6 +166,7 @@ public:
     UwdfloodingHandler(UwDflooding* m, Packet *p);
     virtual ~UwdfloodingHandler();
 	Packet* pkt() const;
+	void setPacket(Packet *p);
 
 protected:
     void expire(Event *e);

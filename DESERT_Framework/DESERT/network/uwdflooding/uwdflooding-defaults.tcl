@@ -45,7 +45,6 @@ load libuwal.so
 PacketHeaderManager set tab_(PacketHeader/DFLOODING) 1
 PacketHeaderManager set tab_(PacketGeader/DFLOODING_NOTIFICATION) 1
 
-Module/UW/DFLOODING set debug_                    0
 Module/UW/DFLOODING set t_max_                    65
 Module/UW/DFLOODING set t_min_                    5
 Module/UW/DFLOODING set t_dupl_                   20

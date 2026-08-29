@@ -94,11 +94,15 @@ UwdfloodingHandler::pkt() const
 	return pkt_;
 }
 
+void
+UwdfloodingHandler::setPacket(Packet *p)
+{
+	pkt_ = p;
+}
+
 UwDflooding::UwDflooding()
     : ipAddr_(0)
     , packets_forwarded_(0)
-	, trace_path_(false)
-	, trace_file_path_name_((char *) "trace")
     , t_max_(0)
     , t_min_(0)
     , n_dupl_(0)
@@ -140,18 +144,19 @@ UwDflooding::doForward(Packet *p)
         map_packets_state::iterator it2 = it->second.find(uid);
         if (it2 != it->second.end()) {
             packet_state &st = it2->second;
-            fh->hop() = st.hop;
-            fh->hop()++;
+            fh->hop() = st.hop + 1;
             st.is_relayed = true;
-            st.timer = nullptr;
+        	st.timer->setPacket(nullptr);
+        	delete st.timer;
+        	st.timer = nullptr;
         }
     }
 
     sendDown(p);
     packets_forwarded_++;
-
-    if (trace_path_)
-    	this->writePathInTrace(p, "FRWD_DTA");
+	printOnLog(Logger::LogLevel::DEBUG,
+			"UWDFLOODING",
+			"doForward()::Packet relayed " + std::to_string(ch->uid()) + ")");
 }
 
 int
@@ -175,19 +180,6 @@ UwDflooding::command(int argc, const char *const *argv)
 				return TCL_ERROR;
 			}
 			return TCL_OK;
-		} else if (strcasecmp(argv[1], "trace") == 0) {
-			string tmp_ = ((char *) argv[2]);
-			trace_file_path_name_ = new char[tmp_.length() + 1];
-			strcpy(trace_file_path_name_, tmp_.c_str());
-			if (trace_file_path_name_ == NULL) {
-				fprintf(stderr, "Empty string for the trace file name");
-				return TCL_ERROR;
-			}
-			trace_path_ = true;
-			remove(trace_file_path_name_);
-			trace_file_path_.open(trace_file_path_name_);
-			trace_file_path_.close();
-			return TCL_OK;
 		}
 	}
 	return Module::command(argc, argv);
@@ -201,99 +193,124 @@ UwDflooding::recv(Packet *p)
     hdr_uwdflooding *flh = HDR_UWDFLOODING(p);
 
     if (!ch->error()) {
-        // Cancel by timer (Notification received)
-        if (ch->ptype() == PT_UWDFLOODING_NOTIFICATION) {
-            if (trace_path_)
-                this->writePathInTrace(p, "RECV_NTFC");
 
-            map_all_packets::iterator it2 = my_all_packets_.find(iph->saddr());
-        	if (it2 != my_all_packets_.end()) {
-        		map_packets_state::iterator it3 = it2->second.find(ch->uid());
-        		if (it3 != it2->second.end()) {
-        			if (it3->second.timer != nullptr) {
-        				it3->second.timer->force_cancel();
-        				Packet::free(it3->second.timer->pkt());
-        				delete it3->second.timer;
-        				it3->second.timer = nullptr;
-        			}
-        			if (trace_path_)
-        				this->writePathInTrace(p, "CNCL_FRWD");
-        		}
-        	}
-            Packet::free(p);
-            return;
-        }
         if (ch->direction() == hdr_cmn::UP) {
-            if (trace_path_)
-                this->writePathInTrace(p, "RECV_DTA");
+        	/*
+        	 * When a node receives a “Receive Notification” it will
+        	 * discard any forwarding of that packet.
+        	 */
+        	// Cancel by timer (Notification received)
+        	if (ch->ptype() == PT_UWDFLOODING_NOTIFICATION) {
+        		printOnLog(Logger::LogLevel::DEBUG,
+					"UWDFLOODING",
+					"recv():: Notification packet received for UID: " +
+						std::to_string(ch->uid()) + " from src: " +
+						printIP(iph->saddr()));
 
+        		map_all_packets::iterator it2 = my_all_packets_.find(iph->saddr());
+        		if (it2 != my_all_packets_.end()) {
+        			map_packets_state::iterator it3 = it2->second.find(ch->uid());
+        			if (it3 != it2->second.end()) {
+        				if (it3->second.timer != nullptr) {
+        					it3->second.timer->force_cancel();
+        					Packet::free(it3->second.timer->pkt());
+        					delete it3->second.timer;
+        					it3->second.timer = nullptr;
+        				}
+        				printOnLog(Logger::LogLevel::DEBUG,
+							"UWDFLOODING",
+							"recv():: Forwarding timer cancelled for UID: " +
+								std::to_string(ch->uid()));
+        			}
+        		}
+        		Packet::free(p);
+        		return;
+        	}
+
+        	// Destination address not set -> drop
             if (iph->daddr() == 0) {
-                std::cerr << "Destination address not set." << std::endl;
-                if (trace_path_)
-                    this->writePathInTrace(p, "FREE_DTA");
+                printOnLog(Logger::LogLevel::DEBUG,
+                    "UWDFLOODING",
+                    "recv():: Destination address is 0. Dropping packet.");
                 Packet::free(p);
                 return;
             }
 
-            // Packet destined to this node
+        	/*
+        	* The end destination will immediately (with absolute precedence)
+        	* broadcast (single hop) a “Receive Notification”
+        	* message containing the original packet
+        	*/
+        	// Packet destined to this node
             if (iph->daddr() == ipAddr_) {
-            	// Senf notification message
+                printOnLog(Logger::LogLevel::DEBUG,
+                    "UWDFLOODING",
+                    "recv():: Packet UID: " + std::to_string(ch->uid()) +
+                        " reached final destination node " + std::to_string(ipAddr_));
+
+                // Send notification message
                 Packet *notif = Packet::alloc();
 
                 hdr_cmn *ch_ = HDR_CMN(notif);
                 ch_->ptype() = PT_UWDFLOODING_NOTIFICATION;
                 ch_->size() = 0;
-            	ch_->uid() = ch->uid();
+                ch_->uid() = ch->uid();
                 ch_->direction() = hdr_cmn::DOWN;
                 ch_->prev_hop_ = ipAddr_;
                 ch_->next_hop() = UWIP_BROADCAST;
 
-            	hdr_uwip *iph_ = HDR_UWIP(notif);
-            	iph_->saddr() = iph->saddr();
-            	iph_->daddr() = UWIP_BROADCAST;
+                hdr_uwip *iph_ = HDR_UWIP(notif);
+                iph_->saddr() = iph->saddr();
+                iph_->daddr() = UWIP_BROADCAST;
 
-                if (trace_path_)
-                    this->writePathInTrace(notif, "FRWD_NTFC");
-
+                printOnLog(Logger::LogLevel::DEBUG,
+                    "UWDFLOODING",
+                    "recv():: Sending notification message down for UID: " +
+                        std::to_string(ch->uid()));
                 sendDown(notif);
 
-                if (trace_path_)
-                    this->writePathInTrace(p, "SDUP_DTA");
                 sendUp(p);
                 return;
             }
 
             // Packet from this node (loopback) - discard
             if (iph->saddr() == ipAddr_) {
-                if (trace_path_)
-                    this->writePathInTrace(p, "FREE_DTA");
+                printOnLog(Logger::LogLevel::DEBUG,
+                    "UWDFLOODING",
+                    "recv():: Loopback packet detected from self. Dropping.");
                 Packet::free(p);
                 return;
             }
 
             // Broadcast packet
             if (iph->daddr() == UWIP_BROADCAST) {
-                // sendUp always: the destination is in broadcast.
-                ch->size() -= sizeof(hdr_uwdflooding);
-                if (trace_path_)
-                    this->writePathInTrace(p, "SDUP_DTA");
-                sendUp(p->copy());
+                printOnLog(Logger::LogLevel::DEBUG,
+                    "UWDFLOODING",
+                    "recv():: Processing broadcast packet UID: " +
+                        std::to_string(ch->uid()) + " from src: " +
+                        printIP(iph->saddr()));
 
-                // SendDown
+            	// sendUp always: the destination is in broadcast.
+            	ch->size() -= sizeof(hdr_uwdflooding);
+            	sendUp(p->copy());
+
+                // SendDown setup
                 ch->direction() = hdr_cmn::DOWN;
                 ch->prev_hop_ = ipAddr_;
                 ch->next_hop() = UWIP_BROADCAST;
                 ch->size() += sizeof(hdr_uwdflooding);
 
-                map_all_packets::iterator it2 =
-                    my_all_packets_.find(iph->saddr());
+                map_all_packets::iterator it2 = my_all_packets_.find(iph->saddr());
 
                 if (it2 != my_all_packets_.end()) {
-                    map_packets_state::iterator it3 =
-                        it2->second.find(ch->uid());
+                    map_packets_state::iterator it3 = it2->second.find(ch->uid());
 
+                	/*
+                	 * First time a given packet from and to other nodes
+                	 * is encountered, schedule for forwarding after a delay
+                	 * drawn uniformly from [Tmin , Tmax ].
+                	 */
                     if (it3 == it2->second.end()) {
-                        // Known source but new packet -> add to map and schedule forwarding
                         packet_state new_state;
                         new_state.hop = flh->hop();
                         new_state.nd = 0;
@@ -306,170 +323,102 @@ UwDflooding::recv(Packet *p)
 
                         it2->second.insert(std::pair<uint16_t, packet_state>(ch->uid(), new_state));
 
-                        if (trace_path_)
-                            this->writePathInTrace(p, "SCHD_DTA");
+                        printOnLog(Logger::LogLevel::DEBUG,
+                            "UWDFLOODING",
+                            "recv():: Scheduled broadcast forwarding for UID: " +
+                                std::to_string(ch->uid()) + " with delay: " +
+                                std::to_string(delay));
+
                         Packet::free(p);
                         return;
                     }
 
+                	/*
+                	 * Additional packets with the same identifier will be
+                	 * treated as duplicates.
+                	 */
                     // Packet already in map
                     packet_state &st = it3->second;
-
+					/*
+                	 * Duplicates received after relaying has been performed
+                	 * will be discarded.
+					 */
                     if (st.is_relayed) {
-                        if (trace_path_)
-                            this->writePathInTrace(p, "FREE_DTA");
-                        Packet::free(p);
-                        return;
-                    }
-
-                    if (flh->hop() > st.hop) {
-                        if (Scheduler::instance().clock() -
-							st.timestamp <= t_dupl_) {
-	                        st.nd++;
-	                        double r = uniform(0, 1);
-	                        if (st.nd > n_dupl_ - r) {
-	                        	if (st.timer != nullptr) {
-	                        		st.timer->force_cancel();
-	                        		Packet::free(st.timer->pkt());
-	                        		delete st.timer;
-	                        		st.timer = nullptr;
-	                        	}
-	                        	if (trace_path_)
-	                        		this->writePathInTrace(p, "CNCL_DUP");
-	                        	Packet::free(p);
-	                        	return;
-	                        }
-	                        if (trace_path_)
-	                        	this->writePathInTrace(p, "FREE_DTA");
-	                        Packet::free(p);
-	                        return;
-							} else {
-								// T_Dupl window expired,
-								// just drop duplicate but keep timer
-								if (trace_path_)
-									this->writePathInTrace(p, "FREE_DTA");
-								Packet::free(p);
-								return;
-							}
-                    }
-
-                    if (flh->hop() < st.hop) {
-						st.hop = flh->hop();
-                        if (trace_path_)
-                            this->writePathInTrace(p, "UPDT_HOP");
-                        Packet::free(p);
-                        return;
-                    }
-
-                    // Same hop count
-                    // Not set by rules
-                    if (trace_path_)
-                        this->writePathInTrace(p, "FREE_DTA");
-                    Packet::free(p);
-                    return;
-                }
-
-                // New source - add to map and schedule forwarding
-                packet_state new_state;
-                new_state.hop = flh->hop();
-                new_state.nd = 0;
-                new_state.is_relayed = false;
-                new_state.timestamp = Scheduler::instance().clock();
-                new_state.timer = new UwdfloodingHandler(this, p->copy());
-
-                double delay = uniform(t_min_, t_max_);
-                new_state.timer->sched(delay);
-
-                map_packets_state new_map;
-                new_map.insert(std::pair<uint16_t, packet_state>(ch->uid(), new_state));
-                my_all_packets_.insert(std::pair<uint8_t, map_packets_state>(iph->saddr(), new_map));
-
-                if (trace_path_)
-                    this->writePathInTrace(p, "SCHD_DTA");
-                Packet::free(p);
-                return;
-            }
-
-            // Unicast packet not for this node - forward
-            if (iph->daddr() != ipAddr_) {
-                ch->direction() = hdr_cmn::DOWN;
-                ch->prev_hop_ = ipAddr_;
-                ch->next_hop() = UWIP_BROADCAST;
-
-                map_all_packets::iterator it2 =
-                    my_all_packets_.find(iph->saddr());
-                if (it2 != my_all_packets_.end()) {
-                    map_packets_state::iterator it3 =
-                        it2->second.find(ch->uid());
-
-                    if (it3 == it2->second.end()) {
-                        // Known source and new packet -> add it and forward
-                        packet_state new_state;
-                        new_state.hop = flh->hop();
-                        new_state.nd = 0;
-                        new_state.is_relayed = false;
-                        new_state.timestamp = Scheduler::instance().clock();
-                        new_state.timer = new UwdfloodingHandler(this, p->copy());
-
-                        double delay = uniform(t_min_, t_max_);
-                        new_state.timer->sched(delay);
-
-                        it2->second.insert(std::pair<uint16_t, packet_state>(ch->uid(), new_state));
-
-                        if (trace_path_)
-                        	this->writePathInTrace(p, "SCHD_DTA");
-                        Packet::free(p);
-                        return;
-                    }
-                    // Packet already seen - drop
-                    packet_state &st = it3->second;
-                    if (flh->hop() > st.hop) {
-                    	if (Scheduler::instance().clock() -
-							st.timestamp <= t_dupl_) {
+                    	/*
+                    	 * Duplicates received with a higher hop counter will be
+                    	 * counted, nd being the number of duplicates received
+                    	 * (not including the original packet or duplicates with
+                    	 * the same or a lower hop counter).
+                    	 */
+                    	if (flh->hop() > st.hop)
                     		st.nd++;
-                    		double r = uniform(0, 1);
-                    		if (st.nd > n_dupl_ - r) {
-                    			if (st.timer != nullptr) {
-                    				st.timer->force_cancel();
-                    				Packet::free(st.timer->pkt());
-                    				delete st.timer;
-                    				st.timer = nullptr;
-                    			}
-                    			if (trace_path_)
-                    				this->writePathInTrace(p, "CNCL_DUP");
-                    			Packet::free(p);
-                    			return;
-                    		}
-                    		if (trace_path_)
-                    			this->writePathInTrace(p, "FREE_DTA");
-                    		Packet::free(p);
-                    		return;
-							}
-						// T_Dupl window expired,
-						// just drop duplicate but keep timer
-						if (trace_path_)
-							this->writePathInTrace(p, "FREE_DTA");
-						Packet::free(p);
-						return;
+
+                        printOnLog(Logger::LogLevel::DEBUG,
+                            "UWDFLOODING",
+                            "recv():: Packet UID: " + std::to_string(ch->uid()) +
+                                " already relayed. Dropping duplicate.");
+                        Packet::free(p);
+                        return;
+                    }
+
+                	/*
+                	 * Each time a duplicate with a higher hop counter
+                	 * is received, the node will draw a random number
+                	 * r ∈ (0, 1]. If the number of duplicates received
+                	 * nd > NDupl −r, the forwarding is discarded.
+                	 * NDupl is a predefined maximum number of duplicates,
+                	 * which may be non-integer. This means that if
+                	 * nd = floor(NDupl ), the forwarding is discarded with
+                	 * probability equal to the fractional part of NDupl .
+                	 */
+                    if (flh->hop() > st.hop) {
+                        st.nd++;
+                        double r = uniform(0, 1);
+                        if (st.nd > n_dupl_ - r) {
+                            if (st.timer != nullptr) {
+                                st.timer->force_cancel();
+                                Packet::free(st.timer->pkt());
+                                delete st.timer;
+                                st.timer = nullptr;
+                            }
+                            printOnLog(Logger::LogLevel::DEBUG,
+                                "UWDFLOODING",
+                                "recv():: Duplicate threshold reached for UID: " +
+                                    std::to_string(ch->uid()) + ". Cancelling timer.");
+                            Packet::free(p);
+                            return;
+                        }
+                        Packet::free(p);
+                        return;
 					}
 
+                	/*
+                	 * When a duplicate is received with a lower hop counter
+                	 * (having travelled fewer hops) the hop counter of the
+                	 * packet to be forwarded will be updated with the new value.
+                	 */
                     if (flh->hop() < st.hop) {
                     	st.hop = flh->hop();
-                    	if (trace_path_)
-                    		this->writePathInTrace(p, "UPDT_HOP");
+                    	printOnLog(Logger::LogLevel::DEBUG,
+							"UWDFLOODING",
+							"recv():: Hop count updated to " +
+								std::to_string(st.hop) + " for UID: " +
+								std::to_string(ch->uid()));
                     	Packet::free(p);
                     	return;
                     }
 
-                    // Same hop count
-                    // Not set by rules
-                    if (trace_path_)
-                    	this->writePathInTrace(p, "FREE_DTA");
+                	// flh.hop == st.hop NOT SET BY RULES -> DROP
                     Packet::free(p);
                     return;
                 }
 
-                // New source - forward
+            	/*
+				 * First time a given packet from and to other nodes
+				 * is encountered, schedule for forwarding after a delay
+				 * drawn uniformly from [Tmin , Tmax ].
+				 */
+                // New source
                 packet_state new_state;
                 new_state.hop = flh->hop();
                 new_state.nd = 0;
@@ -484,93 +433,231 @@ UwDflooding::recv(Packet *p)
                 new_map.insert(std::pair<uint16_t, packet_state>(ch->uid(), new_state));
                 my_all_packets_.insert(std::pair<uint8_t, map_packets_state>(iph->saddr(), new_map));
 
-                if (trace_path_)
-                	this->writePathInTrace(p, "SCHD_DTA");
+                printOnLog(Logger::LogLevel::DEBUG,
+                    "UWDFLOODING",
+                    "recv():: New source " + printIP(iph->saddr()) +
+                        " registered. Scheduled UID: " + std::to_string(ch->uid()));
+
                 Packet::free(p);
                 return;
             }
 
-            std::cerr << "State machine ERROR." << std::endl;
-            if (trace_path_)
-                this->writePathInTrace(p, "FREE_DTA");
+        	// Unicast packet not for this node - forward
+            if (iph->daddr() != ipAddr_) {
+                printOnLog(Logger::LogLevel::DEBUG,
+                    "UWDFLOODING",
+                    "recv():: Processing unicast packet UID: " +
+                        std::to_string(ch->uid()) + " from src: " +
+                        printIP(iph->saddr()) + "to dst: " +
+                        printIP(iph->daddr()));
+
+                // SendDown setup
+                ch->direction() = hdr_cmn::DOWN;
+                ch->prev_hop_ = ipAddr_;
+                ch->next_hop() = UWIP_BROADCAST;
+
+                map_all_packets::iterator it2 = my_all_packets_.find(iph->saddr());
+
+                if (it2 != my_all_packets_.end()) {
+                    map_packets_state::iterator it3 = it2->second.find(ch->uid());
+
+                	/*
+                	 * First time a given packet from and to other nodes
+                	 * is encountered, schedule for forwarding after a delay
+                	 * drawn uniformly from [Tmin , Tmax ].
+                	 */
+                    if (it3 == it2->second.end()) {
+                        packet_state new_state;
+                        new_state.hop = flh->hop();
+                        new_state.nd = 0;
+                        new_state.is_relayed = false;
+                        new_state.timestamp = Scheduler::instance().clock();
+                        new_state.timer = new UwdfloodingHandler(this, p->copy());
+
+                        double delay = uniform(t_min_, t_max_);
+                        new_state.timer->sched(delay);
+
+                        it2->second.insert(std::pair<uint16_t, packet_state>(ch->uid(), new_state));
+
+                        printOnLog(Logger::LogLevel::DEBUG,
+                            "UWDFLOODING",
+                            "recv():: Scheduled broadcast forwarding for UID: " +
+                                std::to_string(ch->uid()) + " with delay: " +
+                                std::to_string(delay));
+
+                        Packet::free(p);
+                        return;
+                    }
+
+                	/*
+                	 * Additional packets with the same identifier will be
+                	 * treated as duplicates.
+                	 */
+                    // Packet already in map
+                    packet_state &st = it3->second;
+					/*
+                	 * Duplicates received after relaying has been performed
+                	 * will be discarded.
+					 */
+                    if (st.is_relayed) {
+                    	/*
+                    	 * Duplicates received with a higher hop counter will be
+                    	 * counted, nd being the number of duplicates received
+                    	 * (not including the original packet or duplicates with
+                    	 * the same or a lower hop counter).
+                    	 */
+                    	if (flh->hop() > st.hop)
+                    		st.nd++;
+
+                        printOnLog(Logger::LogLevel::DEBUG,
+                            "UWDFLOODING",
+                            "recv():: Packet UID: " + std::to_string(ch->uid()) +
+                                " already relayed. Dropping duplicate.");
+                        Packet::free(p);
+                        return;
+                    }
+
+                	/*
+                	 * Each time a duplicate with a higher hop counter
+                	 * is received, the node will draw a random number
+                	 * r ∈ (0, 1]. If the number of duplicates received
+                	 * nd > NDupl −r, the forwarding is discarded.
+                	 * NDupl is a predefined maximum number of duplicates,
+                	 * which may be non-integer. This means that if
+                	 * nd = floor(NDupl ), the forwarding is discarded with
+                	 * probability equal to the fractional part of NDupl .
+                	 */
+                    if (flh->hop() > st.hop) {
+                        st.nd++;
+                        double r = uniform(0, 1);
+                        if (st.nd > n_dupl_ - r) {
+                            if (st.timer != nullptr) {
+                                st.timer->force_cancel();
+                                Packet::free(st.timer->pkt());
+                                delete st.timer;
+                                st.timer = nullptr;
+                            }
+                            printOnLog(Logger::LogLevel::DEBUG,
+                                "UWDFLOODING",
+                                "recv():: Duplicate threshold reached for UID: " +
+                                    std::to_string(ch->uid()) + ". Cancelling timer.");
+                            Packet::free(p);
+                            return;
+                        }
+                        Packet::free(p);
+                        return;
+					}
+
+                	/*
+                	 * When a duplicate is received with a lower hop counter
+                	 * (having travelled fewer hops) the hop counter of the
+                	 * packet to be forwarded will be updated with the new value.
+                	 */
+                    if (flh->hop() < st.hop) {
+                    	st.hop = flh->hop();
+                    	printOnLog(Logger::LogLevel::DEBUG,
+							"UWDFLOODING",
+							"recv():: Hop count updated to " +
+								std::to_string(st.hop) + " for UID: " +
+								std::to_string(ch->uid()));
+                    	Packet::free(p);
+                    	return;
+                    }
+
+                	// flh.hop == st.hop NOT SET BY RULES -> DROP
+                    Packet::free(p);
+                    return;
+                }
+
+            	/*
+				 * First time a given packet from and to other nodes
+				 * is encountered, schedule for forwarding after a delay
+				 * drawn uniformly from [Tmin , Tmax ].
+				 */
+                // New source
+                packet_state new_state;
+                new_state.hop = flh->hop();
+                new_state.nd = 0;
+                new_state.is_relayed = false;
+                new_state.timestamp = Scheduler::instance().clock();
+                new_state.timer = new UwdfloodingHandler(this, p->copy());
+
+                double delay = uniform(t_min_, t_max_);
+                new_state.timer->sched(delay);
+
+                map_packets_state new_map;
+                new_map.insert(std::pair<uint16_t, packet_state>(ch->uid(), new_state));
+                my_all_packets_.insert(std::pair<uint8_t, map_packets_state>(iph->saddr(), new_map));
+
+                printOnLog(Logger::LogLevel::DEBUG,
+                    "UWDFLOODING",
+                    "recv():: New source " + printIP(iph->saddr()) +
+                        " registered. Scheduled UID: " + std::to_string(ch->uid()));
+
+                Packet::free(p);
+                return;
+            }
+
+
+            printOnLog(Logger::LogLevel::DEBUG,
+                "UWDFLOODING",
+                "recv()::UP - Unexpected state reached for UID: " +
+                    std::to_string(ch->uid()));
             Packet::free(p);
             return;
         }
 
         if (ch->direction() == hdr_cmn::DOWN) {
-            if (trace_path_)
-                this->writePathInTrace(p, "RECV_DTA");
 
             if (iph->daddr() == 0) {
-                std::cerr << "Destination address equals to 0." << std::endl;
-                if (trace_path_)
-                    this->writePathInTrace(p, "FREE_DTA");
+                printOnLog(Logger::LogLevel::DEBUG,
+                    "UWDFLOODING",
+                    "recv():: ERROR - Destination is 0 on DOWN packet.");
                 Packet::free(p);
                 return;
             }
 
             if (iph->daddr() == ipAddr_) {
-                if (trace_path_)
-                    this->writePathInTrace(p, "SDUP_DTA");
+                printOnLog(Logger::LogLevel::DEBUG,
+                    "UWDFLOODING",
+                    "recv():: DOWN packet reached destination " + std::to_string(ipAddr_));
                 sendUp(p);
                 return;
             }
 
-            // iph->daddr() != ipAddr_ - forward the packet
+        	/*
+        	 * When a new packet is received from the application
+        	 * layer, send down to MAC layer immediately with hop
+        	 * counter set to 1.
+        	 */
+            // Forward packet down
             ch->prev_hop_ = ipAddr_;
             ch->next_hop() = UWIP_BROADCAST;
             ch->size() += sizeof(hdr_uwdflooding);
             flh->hop() = 1;
 
-            if (trace_path_)
-                this->writePathInTrace(p, "FRWD_DTA");
+            printOnLog(Logger::LogLevel::DEBUG,
+                "UWDFLOODING",
+                "recv():: Forwarding DOWN packet UID: " + std::to_string(ch->uid()));
+
             sendDown(p);
             return;
         }
 
-        std::cerr << "Direction different from UP or DOWN." << std::endl;
-        if (trace_path_)
-            this->writePathInTrace(p, "FREE_DTA");
+        printOnLog(Logger::LogLevel::DEBUG,
+            "UWDFLOODING",
+            "recv():: ERROR - Unknown direction for UID: " + std::to_string(ch->uid()));
         Packet::free(p);
         return;
     }
 
     // Error flag set - drop packet
-    if (trace_path_)
-        this->writePathInTrace(p, "FREE_DTA");
+    printOnLog(Logger::LogLevel::DEBUG,
+        "UWDFLOODING",
+        "recv():: Packet received with ERROR flag. Dropping UID: " +
+            std::to_string(ch->uid()));
     Packet::free(p);
-} /* UwDflooding::recv */
-
-void
-UwDflooding::writePathInTrace(const Packet *p, const string &_info)
-{
-	hdr_uwip *iph = HDR_UWIP(p);
-	hdr_cmn *ch = HDR_CMN(p);
-	hdr_uwdflooding *flh = HDR_UWDFLOODING(p);
-
-	trace_file_path_.open(trace_file_path_name_, fstream::app);
-	osstream_.clear();
-	osstream_.str("");
-	osstream_ << _info;
-	osstream_ << '\t';
-	osstream_ << Scheduler::instance().clock();
-	osstream_ << '\t';
-	osstream_ << static_cast<uint32_t>(ch->uid() & 0x0000ffff);
-	osstream_ << '\t';
-	osstream_ << static_cast<uint32_t>(ch->prev_hop_ & 0x000000ff);
-	osstream_ << '\t';
-	osstream_ << static_cast<uint32_t>(ch->next_hop() & 0x000000ff);
-	osstream_ << '\t';
-	osstream_ << static_cast<uint32_t>(iph->saddr());
-	osstream_ << '\t';
-	osstream_ << static_cast<uint32_t>(iph->daddr());
-	osstream_ << '\t';
-	osstream_ << ch->direction();
-	osstream_ << '\t';
-	osstream_ << ch->ptype();
-	trace_file_path_ << osstream_.str() << endl;
-	trace_file_path_.close();
-}
+}/* UwDflooding::recv */
 
 string
 UwDflooding::printIP(const nsaddr_t &ip_)
