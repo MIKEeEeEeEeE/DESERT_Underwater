@@ -117,12 +117,11 @@ UwCPFlooding::recvSyncClMsg(ClMessage *m)
 	if (m->type() == CLMSG_TRIGGER_STATS) {
 		std::cout << NOW << " CLMSG_TRIGGER_STATS ClMessage" << std::endl;
 
-		int stats_phy_id = 0;
-		ClMsgStats stats_clmsg = ClMsgStats(stats_phy_id, UNICAST);
+		ClMsgStats stats_clmsg = ClMsgStats();
 		sendSyncClMsg(&stats_clmsg);
 
 		std::cout << stats_clmsg.getStats()->type_id << std:: endl; // -1
-		std::cout << (int) StatsEnum::STATS_PHY_LAYER << std:: endl;
+		std::cout << (int) StatsEnum::STATS_PHY_LAYER << std:: endl; // 0
 
 		if (stats_clmsg.getStats()->type_id ==
 				(int) StatsEnum::STATS_PHY_LAYER) {
